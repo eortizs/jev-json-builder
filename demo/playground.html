@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JJB Playground</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+    background: #0b0d10;
+    color: #e6e8eb;
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid #23272e;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  header span { color: #8a93a0; font-size: 12px; }
+  main {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 20px;
+    padding: 20px 24px;
+    max-width: 1400px;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: #12151a;
+    border: 1px solid #23272e;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  label { display: block; font-size: 12px; color: #8a93a0; margin-bottom: 6px; }
+  select, textarea {
+    width: 100%;
+    background: #0b0d10;
+    color: #e6e8eb;
+    border: 1px solid #2c313a;
+    border-radius: 8px;
+    padding: 10px;
+    font: inherit;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  .examples { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+  .examples button {
+    text-align: left;
+    background: #1a1f26;
+    color: #c9d1d9;
+    border: 1px solid #2c313a;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .examples button:hover { border-color: #4a5260; }
+  button.run {
+    width: 100%;
+    background: #2b6fff;
+    color: white;
+    border: 0;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.run:disabled { opacity: 0.5; cursor: wait; }
+  .grid { display: grid; gap: 16px; }
+  pre {
+    margin: 0;
+    padding: 12px;
+    background: #0b0d10;
+    border: 1px solid #23272e;
+    border-radius: 8px;
+    overflow: auto;
+    font: 12px/1.6 ui-monospace, monospace;
+    color: #9effc8;
+    max-height: 320px;
+  }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: #8a93a0; }
+  .stats b { color: #e6e8eb; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #23272e; vertical-align: top; }
+  th { color: #8a93a0; font-weight: 500; }
+  .bar {
+    position: relative;
+    height: 6px;
+    background: #23272e;
+    border-radius: 3px;
+    overflow: hidden;
+    min-width: 80px;
+  }
+  .bar i { position: absolute; inset: 0 auto 0 0; display: block; }
+  .hi { background: #3fb950; }
+  .mid { background: #d29922; }
+  .low { background: #f85149; }
+  .val { font: 12px ui-monospace, monospace; color: #e6e8eb; }
+  .probs { color: #8a93a0; }
+  .err {
+    border-color: #5a2730;
+    background: #1b1216;
+  }
+  .err pre { color: #ffb3bc; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    background: #1a1f26;
+    color: #c9d1d9;
+    border: 1px solid #2c313a;
+    margin-left: 6px;
+  }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Jev JSON Builder</h1>
+  <span>NL input → typed JSON → dual gates · one systemOne call</span>
+</header>
+<main>
+  <section class="panel">
+    <label for="schema">Route / schema</label>
+    <select id="schema">
+      <option value="animation">POST /api/animation</option>
+      <option value="triage">POST /api/triage</option>
+      <option value="orders">POST /api/orders</option>
+    </select>
+    <div style="height:12px"></div>
+    <label for="prompt">Natural language input</label>
+    <textarea id="prompt"></textarea>
+    <div class="examples" id="examples"></div>
+    <button class="run" id="run">Build JSON</button>
+  </section>
+  <section class="grid">
+    <div class="panel" id="resultPanel">
+      <div class="stats" id="stats"></div>
+      <div style="height:12px"></div>
+      <label>Typed payload <span class="pill">req.jev</span></label>
+      <pre id="payload">{}</pre>
+    </div>
+    <div class="panel" id="answersPanel">
+      <label>Jev answers <span class="pill">probabilities + confidence</span></label>
+      <div style="height:8px"></div>
+      <table>
+        <thead>
+          <tr><th>question</th><th>answer</th><th>confidence</th><th>distribution</th></tr>
+        </thead>
+        <tbody id="answers"></tbody>
+      </table>
+    </div>
+    <div class="panel err hidden" id="errorPanel">
+      <label>Gate rejected</label>
+      <pre id="error"></pre>
+    </div>
+  </section>
+</main>
+<script>
+const EXAMPLES = {
+  animation: [
+    "Dame la animación de un cuadrado que aparezca por fading de color rojo y que tenga un tamaño de 1200 píxeles.",
+    "A bounce animation for a blue triangle",
+    "fade out the green circle",
+  ],
+  triage: [
+    "I was charged twice for order #98423 and I want a refund of 49 dollars. This is the third time I'm writing in.",
+    "The export button crashes the settings page in Safari. It works in Chrome.",
+    "How do I reset my password? I cannot log in since this morning.",
+  ],
+  orders: [
+    "Quiero pedir 2 laptops con envío express y que venga envuelto para regalo",
+    "Order 5 pairs of headphones with standard shipping",
+    "I need an overnight tablet, just one",
+  ],
+};
+
+const $ = (id) => document.getElementById(id);
+const schemaEl = $("schema");
+const promptEl = $("prompt");
+
+function renderExamples() {
+  const list = EXAMPLES[schemaEl.value];
+  const box = $("examples");
+  box.innerHTML = "";
+  for (const text of list) {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.onclick = () => { promptEl.value = text; };
+    box.appendChild(b);
+  }
+  promptEl.value = list[0];
+}
+
+function confClass(v) {
+  return v >= 0.85 ? "hi" : v >= 0.5 ? "mid" : "low";
+}
+
+function fmtNum(v) {
+  return typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : String(v);
+}
+
+function answerCell(a) {
+  if (a.type === "choice") return `<span class="val">${a.choice}</span>`;
+  if (a.type === "score") return `<span class="val">score ${fmtNum(a.score)}</span>`;
+  return `<span class="val">noul ${fmtNum(a.noul)}</span>`;
+}
+
+function confOf(a) {
+  return a.type === "noul" ? a.noul : a.confidence;
+}
+
+function distCell(a) {
+  const probs = a.probabilities || {};
+  const parts = Object.entries(probs).map(([k, v]) => `${k} ${v.toFixed(2)}`);
+  return parts.length ? `<span class="probs">${parts.join(" · ")}</span>` : "";
+}
+
+function renderAnswers(answers) {
+  const body = $("answers");
+  body.innerHTML = "";
+  for (const [id, a] of Object.entries(answers)) {
+    const c = confOf(a);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="val">${id}</span><br><span class="probs">${a.type}</span></td>
+      <td>${answerCell(a)}</td>
+      <td>
+        <div class="bar"><i class="${confClass(c)}" style="width:${Math.round(c * 100)}%"></i></div>
+        <span class="probs">${fmtNum(c)}</span>
+      </td>
+      <td>${distCell(a)}</td>`;
+    body.appendChild(tr);
+  }
+}
+
+function renderStats(meta) {
+  const usage = meta.usage || {};
+  $("stats").innerHTML = `
+    <span>model <b>${meta.model}</b></span>
+    <span>systemOne <b>${meta.elapsedMs} ms</b></span>
+    <span>input tokens <b>${usage.input_tokens ?? "-"}</b></span>
+    <span>output tokens <b>${usage.output_tokens ?? "-"}</b></span>`;
+}
+
+function showError(body, status) {
+  $("errorPanel").classList.remove("hidden");
+  $("resultPanel").classList.add("hidden");
+  $("answersPanel").classList.add("hidden");
+  $("error").textContent = JSON.stringify({ status, ...body }, null, 2);
+}
+
+function showResult(data) {
+  $("errorPanel").classList.add("hidden");
+  $("resultPanel").classList.remove("hidden");
+  $("answersPanel").classList.remove("hidden");
+  $("payload").textContent = JSON.stringify(data.payload, null, 2);
+  renderStats(data.meta);
+  renderAnswers(data.meta.answers);
+}
+
+async function run() {
+  const btn = $("run");
+  btn.disabled = true;
+  btn.textContent = "Evaluating…";
+  try {
+    const t0 = performance.now();
+    const res = await fetch(`/api/${schemaEl.value}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ prompt: promptEl.value }),
+    });
+    const totalMs = Math.round(performance.now() - t0);
+    const body = await res.json();
+    if (!res.ok) {
+      showError(body, res.status);
+      return;
+    }
+    body.meta.httpTotalMs = totalMs;
+    showResult(body);
+  } catch (e) {
+    showError({ error: "network_error", message: String(e) }, 0);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Build JSON";
+  }
+}
+
+schemaEl.onchange = renderExamples;
+$("run").onclick = run;
+renderExamples();
+</script>
+</body>
+</html>
