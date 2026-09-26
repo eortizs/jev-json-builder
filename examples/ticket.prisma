@@ -1,0 +1,32 @@
+// Example Prisma schema for jjb-ingest schema ingestion.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TicketCategory {
+  /// A bug report (something is broken)
+  bug
+  /// Charges, invoices, refunds, subscriptions
+  billing
+  /// Login, permissions, profile, security
+  account
+  /// A feature request
+  feature
+}
+
+model Ticket {
+  /// Auto-assigned identifier
+  id        String          @id @default(uuid())
+  /// Which broad category should handle this ticket?
+  category  TicketCategory
+  /// Refund or charge amount in dollars (if any)
+  amount    Int?
+  /// Is the customer explicitly asking for a refund?
+  refund    Boolean?
+  title     String
+  createdAt DateTime        @default(now())
+
+  @@index([category])
+}

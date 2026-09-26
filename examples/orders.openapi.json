@@ -1,0 +1,64 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Orders API", "version": "1.2.0" },
+  "paths": {
+    "/orders": {
+      "post": {
+        "operationId": "createOrder",
+        "summary": "Place an order",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateOrder" }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateOrder": {
+        "type": "object",
+        "required": ["product", "shipping", "quantity"],
+        "properties": {
+          "product": {
+            "type": "string",
+            "description": "Which product does the user want to order?",
+            "enum": ["laptop", "phone", "tablet", "headphones"],
+            "x-jev-criteria": {
+              "laptop": "A laptop computer (portátil)",
+              "phone": "A smartphone (teléfono)",
+              "tablet": "A tablet",
+              "headphones": "Headphones or earbuds (audífonos)"
+            }
+          },
+          "shipping": {
+            "type": "string",
+            "description": "Which shipping speed does the user want?",
+            "enum": ["standard", "express", "overnight"]
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many units of the product to order"
+          },
+          "giftWrap": {
+            "type": "string",
+            "description": "Does the user want the order gift-wrapped?",
+            "enum": ["yes", "no"]
+          },
+          "note": {
+            "type": "string",
+            "description": "Free-text note (not extractable by JJB)"
+          }
+        }
+      },
+      "GiftWrapChoice": {
+        "type": "string",
+        "enum": ["yes", "no"]
+      }
+    }
+  }
+}

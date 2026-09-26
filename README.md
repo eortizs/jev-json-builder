@@ -145,6 +145,127 @@ This exercises the four mechanics at once: two required enums, a required numeri
 
 ---
 
+## Schema ingestion (OpenAPI / Prisma / JSON Schema → `defineSchema`)
+
+Hand-writing the schema DSL is optional. `jjb-ingest` reads the spec you already have and emits a ready-to-use `defineSchema` block (or a runtime `Schema` you can pass straight to `jevBody` / `jevRouter`) — no manual mapping code.
+
+```bash
+npx jjb-ingest examples/orders.openapi.json                 # all object schemas → stdout
+npx jjb-ingest openapi.json -n CreateOrder -o orderSchema.ts # one schema → file
+npx jjb-ingest schema.prisma --runtime                      # runtime schema JSON
+npm run ingest -- examples/ticket.prisma                    # from a checkout
+```
+
+Example (from `examples/orders.openapi.json`):
+
+```
+openapi.json                        jjb-ingest                   orderSchema.ts
+┌──────────────────────┐          ┌──────────────┐          ┌──────────────────────────┐
+│ CreateOrder          │   ───►   │ JSON Schema  │   ───►   │ export const createOrder │
+│  product: enum[...]  │          │    mapper    │          │   Schema = defineSchema({│
+│  quantity: integer   │          │ + codegen    │          │     product: enumField(  │
+│  giftWrap?: enum     │          └──────────────┘          │     quantity: intField(  │
+└──────────────────────┘                                    └──────────────────────────┘
+```
+
+```ts
+// Generated — review the question wording, then ship it:
+// (this is the actual output for examples/orders.openapi.json)
+import { defineSchema, enumField, intField } from "jev-json-builder";
+
+export const createOrderSchema = defineSchema({
+  product: enumField(
+    {
+      "laptop": "A laptop computer (portátil)",
+      "phone": "A smartphone (teléfono)",
+      "tablet": "A tablet",
+      "headphones": "Headphones or earbuds (audífonos)",
+    },
+    { question: "Which product does the user want to order?" },
+  ),
+  shipping: enumField(
+    {
+      "standard": "standard",
+      "express": "express",
+      "overnight": "overnight",
+    },
+    { question: "Which shipping speed does the user want?" },
+  ),
+  quantity: intField({ question: "How many units of the product to order" }),
+  giftWrap: enumField(
+    {
+      "yes": "yes",
+      "no": "no",
+    },
+    { question: "Does the user want the order gift-wrapped?", optional: true },
+  ),
+});
+```
+
+### CLI options
+
+| Flag | Purpose |
+|---|---|
+| `-n, --name <name>` | Ingest only this schema/model/operation (repeatable). Unknown names list what's available. |
+| `-o, --out <file>` | Write to a file; diagnostics go to stderr. |
+| `-f, --format <fmt>` | Force `openapi` \| `json-schema` \| `prisma` (default: auto-detect). |
+| `--runtime` | Emit runtime schema JSON instead of TypeScript. |
+| `--no-header` | Omit the generated-file comment header. |
+| `--no-bodies` | Skip OpenAPI request-body schemas. |
+
+### Supported inputs
+
+| Input | What gets ingested |
+|---|---|
+| **OpenAPI 3.x** JSON | `components.schemas` + operation request bodies |
+| **Swagger 2.0** JSON | `definitions` + `in: body` parameters |
+| **JSON Schema** object | A single flat request payload |
+| **Prisma** schema text | `model` blocks (+ `enum` members as criteria; `///` doc comments become questions) |
+| **Zod** | Convert first (`z.toJSONSchema()` in Zod 4, or `zod-to-json-schema` for Zod 3) then ingest as JSON Schema |
+
+### Type mapping
+
+| Spec property | JJB field | Notes |
+|---|---|---|
+| `string` + `enum` / `const` | `enumField` | Criteria keys ARE the values; descriptions from `description` / `x-jev-criteria` / enum docs |
+| `integer` (`Int`) | `intField` | Regex candidates + choice when ≥ 2 numbers in the input |
+| `number` (`Float`, `Decimal`) | `numberField` | Same, no integer flooring |
+| `boolean` (`Boolean`) | `enumField` `"true"`/`"false"` | JJB enum payloads are strings (heuristic diagnostic) |
+| `oneOf`/`anyOf` of `const`/`enum` | `enumField` | Variants merged into one closed set |
+| nullable / absent from `required` | `{ optional: true }` | Omitted when the user did not state it |
+| `string` (free text), arrays, nested objects | **skipped** | Free text is not JJB's job — route it to `onComplex` or pass it through |
+| `@id @default(uuid()/cuid()/autoincrement())` (Prisma) | **skipped** | Server-assigned keys |
+
+Every skip and heuristic is reported as a diagnostic (in the generated header comment and on CLI stderr), so nothing is dropped silently.
+
+### Vendor extensions (OpenAPI / JSON Schema)
+
+| Extension | Effect |
+|---|---|
+| `x-jev-question` | Override the generated question text |
+| `x-jev-levels: ["low","med","high"]` | Map the property to `scoreField(levels)` |
+| `x-jev-criteria: { "value": "description" }` | Per-value criteria descriptions for enums |
+| `x-jev-threshold: 0.9` | Per-field ambiguity threshold |
+| `x-jev-skip: true` | Drop the field |
+
+### Programmatic API
+
+```ts
+import { readFile } from "node:fs/promises";
+import { ingest, ingestOpenApiSchema, renderSchemaSource, jevBody } from "jev-json-builder";
+
+const spec = await readFile("openapi.json", "utf8");
+const output = ingest(spec);                       // auto-detects the format
+const source = ingestOpenApiSchema(JSON.parse(spec), "CreateOrder");
+
+app.post("/orders", jevBody(source.schema), handler);   // runtime schema, zero codegen
+console.log(renderSchemaSource(source));                // or the defineSchema source
+```
+
+See `examples/orders.openapi.json`, `examples/ticket.prisma`, and `tests/ingest.test.ts` (which round-trips both fixtures through `jevBody` end-to-end).
+
+---
+
 ## API
 
 ### `defineSchema(fields)`
@@ -412,8 +533,8 @@ Helper constructors: `ans.choice(choice, confidence, probabilities?)`, `ans.scor
 - [x] Three demo domains: animation, ticket triage, order intake.
 - [x] Benchmark harness (JJB vs generative LLM, mock + live modes).
 - [x] Semantic router (`jevRouter` / `semanticRouter`) with System Two `onComplex` handoff and perimeter hazard gate.
+- [x] Schema ingestion (`jjb-ingest`) from OpenAPI 3.x / Swagger 2.0 / JSON Schema / Prisma, with Zod via JSON Schema conversion.
 - [ ] NestJS decorator wrapper (`@JevBody()`) on the same core.
-- [ ] Schema ingestion from OpenAPI / Prisma / Zod.
 - [ ] Date / time extraction (regex candidates + `noul` ordering).
 - [ ] Free-text passthrough fields.
 

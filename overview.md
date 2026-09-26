@@ -68,7 +68,8 @@ The Level-1 router turns JJB into a **hybrid orchestration framework (System 1 +
 
 ### Validation status
 
-- 51 unit tests pass (zero network; mock `TypeSafeClient` via fetch injection).
+- 82 unit tests pass (zero network; mock `TypeSafeClient` via fetch injection).
+- `npx jjb-ingest` generates `defineSchema` blocks (or runtime schemas) from OpenAPI 3.x / Swagger 2.0 / JSON Schema / Prisma specs — no manual mapping code.
 - `npm run demo` serves an interactive **playground** (`/playground`) plus four routes: `/api/animation`, `/api/triage`, `/api/orders`, `/api/orchestrate` (semantic router: FAST → JJB, COMPLEX → injected agent) — each response carries the typed payload and `meta` (model, raw answers with probabilities + confidence, token usage, `elapsedMs`).
 - `demo/benchmark.ts` measures JJB end-to-end (p50/p95 wall, `systemOne` time, tokens) with optional generative-LLM baseline; mock mode isolates pipeline overhead, and without `LLM_API_KEY` it prints a labeled heuristic estimate instead of fabricated numbers.
 - Live run requires `TYPESAFE_API_KEY`; without it, requests return 502 `jev_upstream_error`.

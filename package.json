@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "jjb-ingest": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -24,7 +27,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "demo": "node --import tsx/esm demo/server.ts"
+    "demo": "node --import tsx/esm demo/server.ts",
+    "ingest": "node --import tsx/esm src/cli.ts"
   },
   "dependencies": {
     "@typesafe-ai/sdk": "^0.6.0",
