@@ -18,6 +18,7 @@ import { assemble } from "../core/assemble.js";
 import { evaluateGates, defaultGateOptions } from "../core/gates.js";
 import { JevBodyError } from "../core/errors.js";
 import { buildQuestions } from "../core/questions.js";
+import { resolveClient } from "../core/client.js";
 import {
   DEFAULT_AMBIGUITY_THRESHOLD,
   DEFAULT_HAZARD_THRESHOLD,
@@ -171,18 +172,6 @@ function defaultInput(req: Request): string | undefined {
   if (typeof body.prompt === "string") return body.prompt;
   if (typeof body.text === "string") return body.text;
   return undefined;
-}
-
-function resolveClient(provided: TypeSafeClient | undefined): TypeSafeClient {
-  if (provided) return provided;
-  if (!process.env.TYPESAFE_API_KEY) {
-    throw new JevBodyError(
-      502,
-      "jev_upstream_error",
-      "No TypeSafe client configured and TYPESAFE_API_KEY is unset.",
-    );
-  }
-  return new TypeSafeClient({ apiKey: process.env.TYPESAFE_API_KEY });
 }
 
 /**

@@ -269,6 +269,114 @@ Jev answers **all** questions in parallel against the same `state` in one networ
 
 ---
 
+## Hybrid orchestration router (System 1 + System 2)
+
+`jevBody` is **System One** — fast, closed-set, single `systemOne` call. Most of your prompts fit this mold, but a meaningful slice is open-ended: design help, ambiguous phrasing, creative brainstorming. Routing those to a heavy generative LLM (System Two) for every request is wasteful and lets prompt-injection attempts reach your JSON functions.
+
+`jevRouter` adds a Level-1 **semantic router** ahead of the JJB pipeline. The router itself is a tiny `systemOne` call (one `choice` question plus an optional `_hazard` noul) that classifies each prompt into a destination label before any extraction runs:
+
+```
+┌───────────────────────┐
+│ NIVEL 1: Jev Router   │  ⚡ ~80-100 ms — route choice + hazard noul
+└────────────┬──────────┘
+             │
+   destination == FAST_JSON_PAYLOAD         anything else
+             │                                      │
+             ▼                                      ▼
+┌────────────────────────────┐         ┌──────────────────────────────┐
+│ NIVEL 2: jevBody pipeline  │         │ NIVEL 3: onComplex(req, res) │
+│  • systemOne(questions)    │         │  • your heavy LLM agent      │
+│  • dual gates              │         │  • full System Two reasoning │
+│  • typed JSON assembly     │         └──────────────────────────────┘
+└────────────────────────────┘
+```
+
+The router costs ~80 ms on the fast path (one extra round trip) and ~80 ms only on the complex path. Hazard is evaluated as a perimeter check; if it fires, the request is rejected with `422 jev_hazard` before any extraction runs. If the model's confidence on the chosen destination is below `routeThreshold` (default `0.85`), the decision falls back to the heavy destination — never producing a half-confident JSON.
+
+### `jevRouter(spec, options): RequestHandler`
+
+```ts
+import express from "express";
+import { jevRouter, getRouteDecision, defineSchema, enumField, intField, getPayload } from "jev-json-builder";
+
+const animationSchema = defineSchema({ /* ... */ });
+
+const app = express();
+app.use(express.json());
+
+app.post(
+  "/orchestrate",
+  jevRouter(animationSchema, {
+    onComplex: async (req, res) => {
+      // req.jevRoute exposes the decision so the agent can apply
+      // restrictions (e.g. ignore route.meta when hazard is high).
+      const route = getRouteDecision(req);
+      const llmReply = await callYourHeavyAgent(req.body.prompt, { route });
+      res.json({ destination: route.destination, reply: llmReply });
+    },
+  }),
+  (req, res) => {
+    // Same contract as jevBody on the FAST path:
+    const payload = getPayload(req, animationSchema);
+    res.json({ destination: "FAST_JSON_PAYLOAD", payload });
+  },
+);
+```
+
+`JevRouterOptions` extends `JevBodyOptions` (so every `client`, `hazard`, `threshold`, `fieldThresholds`, `statedThreshold`, `input`, `onReject` knob flows through to the FAST path) plus:
+
+| Option | Type | Default | Purpose |
+|---|---|---|---|
+| `onComplex` | `RequestHandler` | **required** | Handler for non-FAST destinations. Throws `TypeError` at construction if missing. |
+| `destinations` | `Record<string, string>` | `FAST_JSON_PAYLOAD` / `COMPLEX_LLM_AGENT` | Criteria map for the choice question. Keys are stable destination labels. |
+| `routeThreshold` | `number` | `0.85` | Minimum confidence required to honor the raw choice; below this the destination is rewritten to `fallbackDestination`. |
+| `fallbackDestination` | `string` | `"COMPLEX_LLM_AGENT"` | Destination used when confidence is low. Must be a key in `destinations`. |
+| `fastDestination` | `string` | `"FAST_JSON_PAYLOAD"` | Label that triggers the JJB pipeline. |
+| `routeHazard` | `boolean \| { question, threshold }` | `true` | Perimeter hazard policy. `false` disables the `_hazard` noul. |
+
+### `semanticRouter(prompt, options): Promise<RouteDecision>`
+
+Core function exposed for non-Express consumers (workers, CLIs, tests). Returns the full decision:
+
+```ts
+import { semanticRouter, isFastRoute } from "jev-json-builder";
+
+const decision = await semanticRouter("How should the new onboarding feel?", {
+  // optional: client, destinations, threshold, fallbackDestination, hazard
+});
+// decision.destination        // "FAST_JSON_PAYLOAD" | "COMPLEX_LLM_AGENT" | custom
+// decision.confidence        // raw model confidence on the choice
+// decision.probabilities     // per-label probabilities
+// decision.fallback          // true when confidence < threshold forced the fallback
+// decision.hazard            // raw _hazard noul when hazard enabled
+// decision.meta              // { model, answers, usage, elapsedMs } of the router call
+```
+
+### Decision policy
+
+| Condition | Result |
+|---|---|
+| `hazard > 0.5` | `JevBodyError` **422 `jev_hazard`** — rejected before extraction. |
+| Route choice confidence `< routeThreshold` | Destination rewritten to `fallbackDestination`, `decision.fallback = true`. |
+| `route === fastDestination` (e.g. `FAST_JSON_PAYLOAD`) | Hand off to `jevBody(spec, options)` pipeline. |
+| Any other destination | Hand off to `options.onComplex(req, res, next)`. |
+
+### Latency note
+
+The fast path now makes **two sequential Jev calls**: one router call (`route` choice + `_hazard` noul) and one extraction call (`systemOne` with the schema questions). On a real Jev network round trip that is roughly **+80–100 ms** vs. `jevBody` alone, accepted in exchange for the perimeter guardrail (hazard and low-confidence prompts never reach the JSON extraction). If latency becomes an issue, fold the `route` choice into the extraction question map in a single call — the router middleware already encapsulates the routing decision in `semanticRouter`, so a future `singleCall: true` mode is a small, additive change.
+
+### Demo
+
+```bash
+npm run demo
+# POST /api/orchestrate  {"prompt":"make a red square bounce at 200"}        -> FAST → JSON
+# POST /api/orchestrate  {"prompt":"how should the logo feel?"}              -> COMPLEX → stub agent
+```
+
+See `demo/server.ts` and `tests/jevRouter.test.ts`.
+
+---
+
 ## Testing with a mock client
 
 `src/testing/mockClient.ts` exposes `createMockClient(answers)` which intercepts the SDK's `fetch` and returns canned answers — zero network in tests.
@@ -303,9 +411,9 @@ Helper constructors: `ans.choice(choice, confidence, probabilities?)`, `ans.scor
 - [x] Interactive playground (`GET /playground`).
 - [x] Three demo domains: animation, ticket triage, order intake.
 - [x] Benchmark harness (JJB vs generative LLM, mock + live modes).
+- [x] Semantic router (`jevRouter` / `semanticRouter`) with System Two `onComplex` handoff and perimeter hazard gate.
 - [ ] NestJS decorator wrapper (`@JevBody()`) on the same core.
 - [ ] Schema ingestion from OpenAPI / Prisma / Zod.
-- [ ] System Two fallback engine (LLM only on gate failure).
 - [ ] Date / time extraction (regex candidates + `noul` ordering).
 - [ ] Free-text passthrough fields.
 

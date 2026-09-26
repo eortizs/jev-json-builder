@@ -27,6 +27,10 @@ JJB replaces the **generative-LLM + tool-calling layer** whose only job was to p
 ```
 [User Input]
     │
+    ⚡ NIVEL 1 (optional): jevRouter — one `choice` (`route`) + one `noul` (`_hazard`) (~80-100ms)
+    │      hazard fires → 422 before any extraction
+    │      low route confidence → COMPLEX_LLM_AGENT (System Two, injected `onComplex`)
+    │      FAST_JSON_PAYLOAD ↓
     ⚡ ONE request: state + all questions evaluated server-side in parallel (~100ms)
     ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -42,6 +46,8 @@ JJB replaces the **generative-LLM + tool-calling layer** whose only job was to p
                            ▼
                 [Express handler with req.jev typed]
 ```
+
+The Level-1 router turns JJB into a **hybrid orchestration framework (System 1 + System 2)**: structured, parameter-explicit prompts never touch a generative LLM, and ambiguous/creative ones are handed to your heavy agent with the router's decision on `req.jevRoute`. See the README's "Hybrid orchestration router" section.
 
 ### The four core pillars
 
@@ -62,7 +68,7 @@ JJB replaces the **generative-LLM + tool-calling layer** whose only job was to p
 
 ### Validation status
 
-- 33 unit tests pass (zero network; mock `TypeSafeClient` via fetch injection).
-- `npm run demo` serves an interactive **playground** (`/playground`) plus three routes: `/api/animation`, `/api/triage`, `/api/orders` — each response carries the typed payload and `meta` (model, raw answers with probabilities + confidence, token usage, `elapsedMs`).
+- 51 unit tests pass (zero network; mock `TypeSafeClient` via fetch injection).
+- `npm run demo` serves an interactive **playground** (`/playground`) plus four routes: `/api/animation`, `/api/triage`, `/api/orders`, `/api/orchestrate` (semantic router: FAST → JJB, COMPLEX → injected agent) — each response carries the typed payload and `meta` (model, raw answers with probabilities + confidence, token usage, `elapsedMs`).
 - `demo/benchmark.ts` measures JJB end-to-end (p50/p95 wall, `systemOne` time, tokens) with optional generative-LLM baseline; mock mode isolates pipeline overhead, and without `LLM_API_KEY` it prints a labeled heuristic estimate instead of fabricated numbers.
 - Live run requires `TYPESAFE_API_KEY`; without it, requests return 502 `jev_upstream_error`.

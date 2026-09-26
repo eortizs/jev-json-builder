@@ -9,8 +9,10 @@ import {
   defineSchema,
   enumField,
   getPayload,
+  getRouteDecision,
   intField,
   jevBody,
+  jevRouter,
   scoreField,
   type JevMeta,
 } from "../src/index.js";
@@ -129,6 +131,31 @@ export function buildDemoApp(): express.Express {
     res.json({ payload, meta: metaView(req.jevMeta!) });
   });
 
+  app.post(
+    "/api/orchestrate",
+    jevRouter(animationSchema, {
+      onComplex: (req, res) => {
+        // In production this would call your heavy LLM (OpenAI, Anthropic,
+        // an in-house agent, ...). The router sets req.jevRoute so you can
+        // apply per-destination restrictions or telemetry.
+        const route = getRouteDecision(req);
+        res.json({
+          destination: route.destination,
+          fallback: route.fallback,
+          confidence: route.confidence,
+          hazard: route.hazard ?? null,
+          reply:
+            "Stub agent reply: this prompt was routed to the heavy LLM agent because it was ambiguous or creative.",
+          routeMeta: metaView(route.meta),
+        });
+      },
+    }),
+    (req, res) => {
+      const payload = getPayload(req, animationSchema);
+      res.json({ destination: "FAST_JSON_PAYLOAD", payload, routeMeta: metaView(req.jevMeta!) });
+    },
+  );
+
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof JevBodyError) {
       return res.status(err.status).json(err.body);
@@ -157,5 +184,6 @@ if (isMainModule) {
     console.log("  POST /api/animation");
     console.log("  POST /api/triage");
     console.log("  POST /api/orders");
+    console.log("  POST /api/orchestrate  (semantic router: FAST → JJB, COMPLEX → onComplex)");
   });
 }

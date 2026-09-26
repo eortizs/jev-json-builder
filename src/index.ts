@@ -61,3 +61,21 @@ export {
   getPayload,
   type JevBodyOptions,
 } from "./express/jevBody.js";
+
+export {
+  jevRouter,
+  getRouteDecision,
+  type JevRouterOptions,
+} from "./express/jevRouter.js";
+
+export {
+  semanticRouter,
+  isFastRoute,
+  DEFAULT_ROUTE_DESTINATIONS,
+  DEFAULT_ROUTE_THRESHOLD,
+  DEFAULT_FALLBACK_DESTINATION,
+  DEFAULT_FAST_DESTINATION,
+  type RouteDecision,
+  type RouteDestinations,
+  type SemanticRouterOptions,
+} from "./core/router.js";
