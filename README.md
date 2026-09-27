@@ -4,7 +4,7 @@
 >
 > Express middleware that turns raw text into a strictly-typed JSON payload using TypeSafe Jev (System One). One HTTP request per call, ~100ms, fully inferred types.
 
-For the conceptual overview see [`overview.md`](./overview.md).
+For the conceptual overview see [`overview.md`](./overview.md). Release-by-release changes live in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
@@ -275,6 +275,12 @@ See `examples/orders.openapi.json`, `examples/ticket.prisma`, and `tests/ingest.
 
 ## API
 
+| Import path | Requires | Exposes |
+| --- | --- | --- |
+| `jev-json-builder` | — | `defineSchema`, field constructors, `jevBody` / `jevRouter`, `runJevPipeline`, gates, errors, ingest API, candidate/date helpers. |
+| `jev-json-builder/nest` | `@nestjs/common` (optional peer) | `JevBody`, `JevPayload`, `JevNestOptions`, `JevHttpRequest`. |
+| `jev-json-builder/testing` | — | `createMockClient`, `ans` helpers. |
+
 ### `defineSchema(fields)`
 
 ```ts
@@ -327,6 +333,22 @@ Dates/times: regex candidates cover ISO (`2026-09-27`, `2026-09-27T15:00`, `2026
 
 `optional: true` adds a paired `noul` `<name>_stated` and causes the field to be **omitted** when the user did not state it.
 
+### `runJevPipeline(text, spec, options?): Promise<JevPipelineResult>`
+
+Transport-agnostic core shared by `jevBody` and the NestJS interceptor — usable directly from workers, queues, or CLIs:
+
+```ts
+import { runJevPipeline } from "jev-json-builder";
+
+const { payload, meta } = await runJevPipeline(
+  "se llama Ana García, seguimiento mañana a las 3pm",
+  leadSchema,
+  { client, now: () => new Date() },
+);
+```
+
+Accepts every option of `jevBody` except the Express-specific `input` extractor and `onReject` hook (which becomes `onGateReject`, without the request argument). Throws `JevBodyError` on every failure path; returns `{ payload, meta }` on success.
+
 ### `jevBody(spec, options?): RequestHandler`
 
 | Option | Default | Description |
@@ -344,6 +366,19 @@ Dates/times: regex candidates cover ISO (`2026-09-27`, `2026-09-27T15:00`, `2026
 ### `getPayload(req, spec)`
 
 Typed accessor for `req.jev`. Pair with `PayloadOf<typeof spec>` to get the inferred payload type in your handler.
+
+### Candidate & date helpers
+
+The extraction internals behind `intField` / `stringField` / `dateField` are exported for testing and tooling:
+
+| Export | Purpose |
+| --- | --- |
+| `numericCandidates(text)` | Ordered 1–6 digit numbers as verbatim strings. |
+| `candidateIndexFromKey(key)` | `"n3"` → `3` (candidate choice-key decoder). |
+| `spanCandidates(text)` | Free-text span pool: quoted spans, ES/EN trigger phrases, key–value pairs, clause segments (deduped, capped at 10). |
+| `extractDateCandidates(text)` | Date/time span pool: ISO, numeric, times, relative days, combined forms. |
+| `normalizeDate(span, now?, field?)` | Span → `{ iso, hasTime }`; ISO-8601 `YYYY-MM-DD` or `YYYY-MM-DDTHH:mm` (local wall-clock). Throws `jev_invalid_date`. |
+| `validateDateParts(y, m, d, h?, min?, field?)` | Leap-aware calendar/clock validation; throws `jev_invalid_date`. |
 
 ### `req.jevMeta`
 
