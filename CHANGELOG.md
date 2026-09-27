@@ -9,6 +9,12 @@ All notable changes to this project are documented here. The format follows [Kee
 - `stringField`: new "Pool truncation caveat" note — the span pool caps at 10 candidates in document order, so trailing fragments of long, noisy texts never reach the `<name>_candidates` choice question; includes mitigation guidance (quoted spans / explicit `key: value` phrasing, splitting long texts).
 - `jevRouter`: "Planned: `singleCall: true`" design sketch added to the latency note — feasibility (valid merged question map), answers-level assembly refactor, hazard policy merge (single `_hazard` at the stricter threshold), `RouteDecision` contract preservation, COMPLEX token trade-off, and opt-in rollout plan.
 
+## [0.2.3] - 2026-09-27
+
+### Fixed
+
+- **Media triggers stay quiet when the title is already quoted.** In `busca la película 'El padrino' de 1972` the trigger capture `'El padrino' de 1972` (quote + trailing context) joined the pool as a third candidate and diluted the selector enough to trip the ambiguity gate. When the token after a media keyword starts with a quote, the media trigger now yields nothing — the quoted span already covers it.
+
 ## [0.2.2] - 2026-09-27
 
 ### Changed

@@ -20,8 +20,11 @@ const MAX_SPAN_CANDIDATES = 10;
 const QUOTED_SPAN_REGEX =
   /"([^"\n]{1,200})"|'([^'\n]{1,200})'|«([^»\n]{1,200})»|“([^”\n]{1,200})”|‘([^’\n]{1,200})’/g;
 
+// Los triggers de media (película/movie/...) NO disparan cuando el título
+// ya va entrecomillado: los quoted spans ya lo capturan, y un candidato
+// extra con la cola «'El padrino' de 1972» dispersa el selector.
 const TRIGGER_SPAN_REGEX =
-  /(mi nombre es|name is|se llama|named|called|description|comment|title|subject|nota|asunto|película|pelicula|movie|film|serie)\s*[:=]?\s*([^,;.!?!\n]{1,200})/gi;
+  /(mi nombre es|name is|se llama|named|called|description|comment|title|subject|nota|asunto|(?:película|pelicula|movie|film|serie)(?!\s*['"“‘«]))\s*[:=]?\s*([^,;.!?!\n]{1,200})/gi;
 
 const KEY_VALUE_SPAN_REGEX =
   /\b([A-Za-z_][A-Za-z0-9_]{0,30})\s*[:=]\s*([^,;.!?!\n]{1,200})/g;

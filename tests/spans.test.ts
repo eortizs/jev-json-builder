@@ -29,6 +29,14 @@ describe("spanCandidates", () => {
     expect(spanCandidates("la serie Breaking Bad")).toContain("Breaking Bad");
   });
 
+  it("media triggers stay quiet when the title is already quoted", () => {
+    // El quoted span ya captura el título; el trigger no debe añadir una
+    // tercera candidata ruidosa que disperse la selección.
+    const pool = spanCandidates("busca la película 'El padrino' de 1972");
+    expect(pool).toContain("El padrino");
+    expect(pool).not.toContain("'El padrino' de 1972");
+  });
+
   it("captures key-value pairs", () => {
     const pool = spanCandidates("color: rojo");
     expect(pool).toContain("rojo");
