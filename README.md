@@ -325,6 +325,8 @@ stringField({ question: string; optional?: boolean; threshold?: number }): Strin
 
 Free text: a shared span pool is extracted from the input (quoted spans, ES/EN trigger phrases like "se llama Ana" / "description: ...", key–value pairs, clause segments). With a single candidate it is used verbatim (trimmed); with ≥ 2 a `<name>_candidates` choice lets Jev pick the right span. Span heuristics are best-effort — the `choice` question is the disambiguator, and low confidence flows through the ambiguity gate like every other field.
 
+> **Pool truncation caveat.** The span pool is capped at **10 candidates** (`MAX_SPAN_CANDIDATES`, filled in document order; `dateField` shares the same cap for dates). With long, noisy plain-text blocks that mention many potential entities, the fragments that come **after** the first 10 accepted spans are never offered to Jev: they fall outside the `<name>_candidates` choice question, so the parallel `systemOne` call never scrutinizes them and they cannot reach the payload. Mitigations: keep inputs short, state the relevant value early in the text, prefer quoted spans or explicit `key: value` phrasing (quoted/trigger/key–value hits enter the pool before plain clauses), or split very long texts into multiple requests.
+
 ```ts
 dateField({ question: string; optional?: boolean; threshold?: number }): DateField;
 ```
