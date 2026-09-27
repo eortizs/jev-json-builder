@@ -544,6 +544,17 @@ const decision = await semanticRouter("How should the new onboarding feel?", {
 
 The fast path now makes **two sequential Jev calls**: one router call (`route` choice + `_hazard` noul) and one extraction call (`systemOne` with the schema questions). On a real Jev network round trip that is roughly **+80–100 ms** vs. `jevBody` alone, accepted in exchange for the perimeter guardrail (hazard and low-confidence prompts never reach the JSON extraction). If latency becomes an issue, fold the `route` choice into the extraction question map in a single call — the router middleware already encapsulates the routing decision in `semanticRouter`, so a future `singleCall: true` mode is a small, additive change.
 
+### Planned: `singleCall: true` (design sketch)
+
+Fusing router and extraction into one `systemOne` round trip is viable and is the main latency win left on the fast path. Current evaluation:
+
+- **Feasibility.** `systemOne` accepts arbitrary question maps (`validateQuestions` only rejects empty maps and malformed score criteria), so `{ route: choice, _hazard: noul, ...schemaQuestions }` is valid, and all questions are still evaluated server-side in parallel against the same `state`.
+- **Response handling.** `evaluateGates` and `assemble` are already pure functions over the answers map, so the merged call only needs to read `answers.route`, apply the existing fallback policy (confidence `< routeThreshold` → `fallbackDestination`), and — on the FAST destination — run gates + assembly over the same answers. Requires a small refactor: expose an answers-level assembly entry point from `runJevPipeline` (accepting prefetched `{ model, answers, usage, elapsedMs }`).
+- **Hazard policy merge.** Router and pipeline define separate `_hazard` nouls today; a merged map admits only one. Proposed default: one `_hazard` using the router's question, gated at the **stricter** of `routeHazard.threshold` and the pipeline hazard threshold. Alternative (opt-out): send a distinct `_route_hazard` question and keep both gates independent.
+- **Contract preservation.** `req.jevRoute` keeps receiving a full `RouteDecision` (with `meta` from the merged call; `elapsedMs` covers the fused call), so `getRouteDecision`, the demo, and existing tests remain valid.
+- **Trade-off.** On COMPLEX-classified prompts the extraction answers are computed but discarded (handed to `onComplex`). Acceptable because Jev returns probabilities, not prose — but the mode should document that COMPLEX prompts pay extraction-question tokens.
+- **Rollout.** Opt-in `singleCall?: boolean` on `JevRouterOptions` (default `false`); `jevBody` and `semanticRouter` stay untouched. Mock-client tests should assert FAST parity (payload identical to two-call mode), COMPLEX handoff with a complete `RouteDecision`, and low-confidence fallback.
+
 ### Demo
 
 ```bash
