@@ -1,6 +1,6 @@
 {
   "name": "jev-json-builder",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Express middleware that turns natural-language input into strictly-typed JSON payloads via TypeSafe Jev (System One).",
   "type": "module",
   "main": "./dist/index.js",

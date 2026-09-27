@@ -21,7 +21,7 @@ const QUOTED_SPAN_REGEX =
   /"([^"\n]{1,200})"|'([^'\n]{1,200})'|«([^»\n]{1,200})»|“([^”\n]{1,200})”|‘([^’\n]{1,200})’/g;
 
 const TRIGGER_SPAN_REGEX =
-  /(mi nombre es|name is|se llama|named|called|description|comment|title|subject|nota|asunto)\s*[:=]?\s*([^,;.!?!\n]{1,200})/gi;
+  /(mi nombre es|name is|se llama|named|called|description|comment|title|subject|nota|asunto|película|pelicula|movie|film|serie)\s*[:=]?\s*([^,;.!?!\n]{1,200})/gi;
 
 const KEY_VALUE_SPAN_REGEX =
   /\b([A-Za-z_][A-Za-z0-9_]{0,30})\s*[:=]\s*([^,;.!?!\n]{1,200})/g;

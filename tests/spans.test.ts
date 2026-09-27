@@ -22,6 +22,13 @@ describe("spanCandidates", () => {
     expect(spanCandidates("description: laptop rota")).toContain("laptop rota");
   });
 
+  it("captures media titles after película/movie/film/serie triggers", () => {
+    expect(spanCandidates("Dame la calificación de la película The Game")).toContain("The Game");
+    expect(spanCandidates("busca la película El padrino")).toContain("El padrino");
+    expect(spanCandidates("the movie Inception")).toContain("Inception");
+    expect(spanCandidates("la serie Breaking Bad")).toContain("Breaking Bad");
+  });
+
   it("captures key-value pairs", () => {
     const pool = spanCandidates("color: rojo");
     expect(pool).toContain("rojo");

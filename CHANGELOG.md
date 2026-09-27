@@ -9,6 +9,12 @@ All notable changes to this project are documented here. The format follows [Kee
 - `stringField`: new "Pool truncation caveat" note — the span pool caps at 10 candidates in document order, so trailing fragments of long, noisy texts never reach the `<name>_candidates` choice question; includes mitigation guidance (quoted spans / explicit `key: value` phrasing, splitting long texts).
 - `jevRouter`: "Planned: `singleCall: true`" design sketch added to the latency note — feasibility (valid merged question map), answers-level assembly refactor, hazard policy merge (single `_hazard` at the stricter threshold), `RouteDecision` contract preservation, COMPLEX token trade-off, and opt-in rollout plan.
 
+## [0.2.2] - 2026-09-27
+
+### Changed
+
+- **`stringField` trigger pool: media titles.** `película`/`pelicula`/`movie`/`film`/`serie` join the trigger alternation, so "Dame la calificación de la película The Game" yields a clean `The Game` candidate (previously the pool held only the whole clause, which was used verbatim and made free-text search APIs return 0 results). Additive: new candidates only enlarge the pool; the model picks (gated by the selector when 2+ candidates exist).
+
 ## [0.2.1] - 2026-09-27
 
 ### Fixed
