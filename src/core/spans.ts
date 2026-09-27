@@ -26,11 +26,11 @@ const QUOTED_SPAN_REGEX =
 // `para` de prefill reciben frases completas.
 const EMAIL_SPAN_REGEX = /\b([^\s@"'“‘«]+@[^\s@"'“‘«]+\.[^\s@"'“‘«,;:!?!\n]+)\b/g;
 
-// Los triggers de media (película/movie/...) NO disparan cuando el título
-// ya va entrecomillado: los quoted spans ya lo capturan, y un candidato
-// extra con la cola «'El padrino' de 1972» dispersa el selector.
+// Ningún trigger dispara cuando lo que sigue ya va entrecomillado: los
+// quoted spans lo capturan mejor; un candidato extra con la cola
+// «'El padrino' de 1972» solo dispersa el selector.
 const TRIGGER_SPAN_REGEX =
-  /(mi nombre es|name is|se llama|named|called|description|comment|title|título|titulo|subject|nota|asunto|(?:película|pelicula|movie|film|serie)(?!\s*['"“‘«]))\s*[:=]?\s*([^,;.!?!\n]{1,200}?)(?=\s+(?:y|e|pero|but|and|then)\b\s+|[,;.!?!\n]|$)/gi;
+  /(mi nombre es|name is|se llama|named|called|description|comment|title|título|titulo|subject|nota|asunto|mensaje|message|(?:película|pelicula|movie|film|serie))(?!\s*['"“‘«])\s*[:=]?\s*([^,;.!?!\n]{1,200}?)(?=\s+(?:y|e|pero|but|and|then)\b\s+|[,;.!?!\n]|$)/gi;
 
 const KEY_VALUE_SPAN_REGEX =
   /\b([A-Za-z_][A-Za-z0-9_]{0,30})\s*[:=]\s*([^,;.!?!\n]{1,200})/g;

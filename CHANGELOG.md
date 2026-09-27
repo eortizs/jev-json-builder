@@ -9,6 +9,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - `stringField`: new "Pool truncation caveat" note — the span pool caps at 10 candidates in document order, so trailing fragments of long, noisy texts never reach the `<name>_candidates` choice question; includes mitigation guidance (quoted spans / explicit `key: value` phrasing, splitting long texts).
 - `jevRouter`: "Planned: `singleCall: true`" design sketch added to the latency note — feasibility (valid merged question map), answers-level assembly refactor, hazard policy merge (single `_hazard` at the stricter threshold), `RouteDecision` contract preservation, COMPLEX token trade-off, and opt-in rollout plan.
 
+## [0.2.5] - 2026-09-28
+
+### Changed
+
+- **`mensaje`/`message` join the trigger alternation**, so "con el mensaje Bienvenido a nuestra comunidad" yields a clean `Bienvenido a nuestra comunidad` candidate for body-style fields.
+- **The quote-suppression lookahead now applies to every trigger**, not only the media ones: "con asunto 'Hola'" no longer adds a quoted-looking third candidate — the quoted span already owns that case.
+
 ## [0.2.4] - 2026-09-28
 
 ### Fixed

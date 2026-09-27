@@ -37,6 +37,12 @@ describe("spanCandidates", () => {
     expect(pool).toContain(email);
   });
 
+  it("captures message bodies after mensaje/message triggers", () => {
+    expect(
+      spanCandidates("con el mensaje Bienvenido a nuestra comunidad"),
+    ).toContain("Bienvenido a nuestra comunidad");
+  });
+
   it("captures accented título/titulo trigger", () => {
     expect(spanCandidates("con título Hola Jev y con un mensaje")).toContain("Hola Jev");
     expect(spanCandidates("titulo: factura 7")).toContain("factura 7");
