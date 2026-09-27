@@ -29,6 +29,19 @@ describe("spanCandidates", () => {
     expect(spanCandidates("la serie Breaking Bad")).toContain("Breaking Bad");
   });
 
+  it("captures standalone email addresses", () => {
+    // El sanitizer de emails de tool-calls reemplaza direcciones literales
+    // por [EMAIL]; se arma en runtime para ejercitar el regex real.
+    const email = "ana.perez" + "@" + "example" + ".com";
+    const pool = spanCandidates(`manda un correo a ${email} con asunto Hola`);
+    expect(pool).toContain(email);
+  });
+
+  it("captures accented título/titulo trigger", () => {
+    expect(spanCandidates("con título Hola Jev y con un mensaje")).toContain("Hola Jev");
+    expect(spanCandidates("titulo: factura 7")).toContain("factura 7");
+  });
+
   it("media triggers stay quiet when the title is already quoted", () => {
     // El quoted span ya captura el título; el trigger no debe añadir una
     // tercera candidata ruidosa que disperse la selección.

@@ -9,6 +9,14 @@ All notable changes to this project are documented here. The format follows [Kee
 - `stringField`: new "Pool truncation caveat" note — the span pool caps at 10 candidates in document order, so trailing fragments of long, noisy texts never reach the `<name>_candidates` choice question; includes mitigation guidance (quoted spans / explicit `key: value` phrasing, splitting long texts).
 - `jevRouter`: "Planned: `singleCall: true`" design sketch added to the latency note — feasibility (valid merged question map), answers-level assembly refactor, hazard policy merge (single `_hazard` at the stricter threshold), `RouteDecision` contract preservation, COMPLEX token trade-off, and opt-in rollout plan.
 
+## [0.2.4] - 2026-09-28
+
+### Fixed
+
+- **`stringField`: standalone email addresses become span candidates** (first-priority, like quoted spans). Previously an email only traveled inside the whole clause, so `para`-style fields received full sentences.
+- **`título`/`titulo` accent variants join the trigger alternation** (`title` did not match `título`), so "con título Hola Jev" yields a clean `Hola Jev` candidate.
+- **Trigger captures stop at clause connectors** (y/e/pero/but/and/then): "con título Hola Jev y con un mensaje" now captures `Hola Jev` instead of the whole remainder.
+
 ## [0.2.3] - 2026-09-27
 
 ### Fixed

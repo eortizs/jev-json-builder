@@ -8,10 +8,11 @@
  *
  * Pool construction, in priority order, deduped, document order preserved:
  *   1. Quoted spans:  "..." '...' «...» “...” ‘...’
- *   2. Trigger captures (ES/EN): "name is John", "se llama Ana",
+ *   2. Standalone email addresses
+ *   3. Trigger captures (ES/EN): "name is John", "se llama Ana",
  *      "description: ...", "nota: ..." etc.
- *   3. Key–value pairs: "word: value" / "word = value"
- *   4. Clause segments: the input split on commas, semicolons and common
+ *   4. Key–value pairs: "word: value" / "word = value"
+ *   5. Clause segments: the input split on commas, semicolons and common
  *      ES/EN connectors (y/e/pero/but/and/then).
  */
 
@@ -20,11 +21,16 @@ const MAX_SPAN_CANDIDATES = 10;
 const QUOTED_SPAN_REGEX =
   /"([^"\n]{1,200})"|'([^'\n]{1,200})'|«([^»\n]{1,200})»|“([^”\n]{1,200})”|‘([^’\n]{1,200})’/g;
 
+// Direcciones de correo como candidatas de primera prioridad: sin esta
+// captura, un email solo viaja dentro de la cláusula entera y los campos
+// `para` de prefill reciben frases completas.
+const EMAIL_SPAN_REGEX = /\b([^\s@"'“‘«]+@[^\s@"'“‘«]+\.[^\s@"'“‘«,;:!?!\n]+)\b/g;
+
 // Los triggers de media (película/movie/...) NO disparan cuando el título
 // ya va entrecomillado: los quoted spans ya lo capturan, y un candidato
 // extra con la cola «'El padrino' de 1972» dispersa el selector.
 const TRIGGER_SPAN_REGEX =
-  /(mi nombre es|name is|se llama|named|called|description|comment|title|subject|nota|asunto|(?:película|pelicula|movie|film|serie)(?!\s*['"“‘«]))\s*[:=]?\s*([^,;.!?!\n]{1,200})/gi;
+  /(mi nombre es|name is|se llama|named|called|description|comment|title|título|titulo|subject|nota|asunto|(?:película|pelicula|movie|film|serie)(?!\s*['"“‘«]))\s*[:=]?\s*([^,;.!?!\n]{1,200}?)(?=\s+(?:y|e|pero|but|and|then)\b\s+|[,;.!?!\n]|$)/gi;
 
 const KEY_VALUE_SPAN_REGEX =
   /\b([A-Za-z_][A-Za-z0-9_]{0,30})\s*[:=]\s*([^,;.!?!\n]{1,200})/g;
@@ -81,6 +87,7 @@ function firstDefined(m: RegExpExecArray): string | undefined {
 export function spanCandidates(text: string): string[] {
   const hits: SpanHit[] = [
     ...collect(QUOTED_SPAN_REGEX, text, firstDefined),
+    ...collect(EMAIL_SPAN_REGEX, text, firstDefined),
     ...collect(TRIGGER_SPAN_REGEX, text, (m) => m[2]),
     ...collect(KEY_VALUE_SPAN_REGEX, text, (m) => m[2]),
   ];
