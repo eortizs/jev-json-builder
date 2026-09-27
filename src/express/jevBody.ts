@@ -1,33 +1,26 @@
 /**
  * `jevBody(spec)` Express middleware.
  *
- * Reads natural-language text from the request (configurable extractor),
- * compiles Jev questions, sends a single `systemOne` call, runs the
- * dual gates (hazard noul + ambiguity confidence), assembles the typed
- * payload via code (closed-set answers, optional fields omitted), and
- * exposes the result on `req.jev`.
+ * Thin Express glue over the shared `runJevPipeline` runner: extracts the
+ * natural-language text from the request (configurable extractor), runs the
+ * pipeline (questions, single `systemOne` call, dual gates, typed
+ * assembly), and exposes the result on `req.jev`.
  *
  * On any failure, raises a `JevBodyError` with a stable HTTP status so the
  * default error middleware can render a JSON diagnostics body.
  */
 
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { TypeSafeClient } from "@typesafe-ai/sdk";
+import type { TypeSafeClient } from "@typesafe-ai/sdk";
 
-import { assemble } from "../core/assemble.js";
-import { evaluateGates, defaultGateOptions } from "../core/gates.js";
 import { JevBodyError } from "../core/errors.js";
-import { buildQuestions } from "../core/questions.js";
-import { resolveClient } from "../core/client.js";
+import { runJevPipeline } from "../core/pipeline.js";
 import {
-  DEFAULT_AMBIGUITY_THRESHOLD,
-  DEFAULT_HAZARD_THRESHOLD,
   type DefinedSchema,
   type PayloadOf,
   type Schema,
 } from "../core/schema.js";
-import { resolveDefined } from "../core/schema.js";
-import type { AnswerMap, JevMeta } from "../core/types.js";
+import type { JevMeta } from "../core/types.js";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -52,6 +45,8 @@ export type JevBodyOptions = {
   fieldThresholds?: Record<string, number>;
   /** Stated-noul threshold above which an optional field is included (default 0.7). */
   statedThreshold?: number;
+  /** Clock for relative date resolution in dateField (default: current time). */
+  now?: () => Date;
   /** Custom input extractor. Default: req.body?.prompt || req.body?.text. */
   input?: (req: Request) => string | undefined;
   /** Optional hook called when a gate rejects. Can throw or return a payload. */
@@ -77,86 +72,12 @@ export function jevBody<const S extends DefinedSchema>(
   ): Promise<void> {
     try {
       const text = (options.input ?? defaultInput)(req);
-      if (!text || text.trim() === "") {
-        throw new JevBodyError(
-          400,
-          "jev_missing_input",
-          "No natural-language input found in request.",
-        );
+      const pipelineOptions: Parameters<typeof runJevPipeline>[2] = { ...options };
+      if (options.onReject) {
+        const onReject = options.onReject;
+        pipelineOptions.onGateReject = (err) => onReject(err, req);
       }
-
-      const client = resolveClient(options.client);
-      const { schema, config } = resolveDefined(spec);
-
-      const hazardEnabled = options.hazard ?? true;
-      const { questions, numericCandidates } = buildQuestions({
-        defined: spec,
-        inputText: text,
-        hazardEnabled,
-      });
-
-      let result: { model: string; answers: AnswerMap; usage: JevMeta["usage"] };
-      let elapsedMs = 0;
-      try {
-        const t0 = performance.now();
-        const raw = await client.systemOne({ state: text, questions });
-        elapsedMs = Math.round(performance.now() - t0);
-        result = raw as unknown as { model: string; answers: AnswerMap; usage: JevMeta["usage"] };
-      } catch (err) {
-        throw new JevBodyError(
-          502,
-          "jev_upstream_error",
-          err instanceof Error ? err.message : "Upstream TypeSafe request failed.",
-        );
-      }
-
-      const meta: JevMeta = {
-        model: result.model,
-        answers: result.answers,
-        usage: result.usage,
-        elapsedMs,
-      };
-
-      const gateOpts = defaultGateOptions(
-        hazardEnabled,
-        options.threshold ?? config.threshold,
-        options.fieldThresholds ?? {},
-        Object.keys(schema),
-      );
-      if (options.hazardThreshold !== undefined) {
-        gateOpts.hazardThreshold = options.hazardThreshold;
-      }
-      if (options.threshold !== undefined) {
-        gateOpts.ambiguityThreshold = options.threshold;
-      }
-      if (options.fieldThresholds) {
-        for (const [k, v] of Object.entries(options.fieldThresholds)) {
-          gateOpts.fieldThresholds[k] = v;
-        }
-      }
-
-      try {
-        evaluateGates(meta.answers, meta, gateOpts);
-      } catch (err) {
-        if (err instanceof JevBodyError && options.onReject) {
-          const fallback = await options.onReject(err, req);
-          if (fallback) {
-            req.jev = fallback;
-            req.jevMeta = meta;
-            return next();
-          }
-        }
-        throw err;
-      }
-
-      const payload = assemble(
-        schema as Schema,
-        meta.answers,
-        numericCandidates,
-        meta,
-        { statedThreshold: options.statedThreshold ?? 0.7 },
-      );
-
+      const { payload, meta } = await runJevPipeline(text ?? "", spec, pipelineOptions);
       req.jev = payload;
       req.jevMeta = meta;
       return next();

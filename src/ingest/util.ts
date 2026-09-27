@@ -2,7 +2,7 @@
  * Naming and question-text helpers shared by the ingest converters.
  */
 
-export type QuestionKind = "enum" | "boolean" | "int" | "number" | "score";
+export type QuestionKind = "enum" | "boolean" | "int" | "number" | "score" | "string" | "date";
 
 function camelWord(word: string): string {
   return word.charAt(0).toLowerCase() + word.slice(1);
@@ -43,6 +43,10 @@ export function defaultQuestion(name: string, kind: QuestionKind): string {
       return `What number does the user specify for "${name}"?`;
     case "score":
       return `What level of "${name}" does the user express?`;
+    case "string":
+      return `What text does the user specify for "${name}"?`;
+    case "date":
+      return `What date or time does the user specify for "${name}"?`;
   }
 }
 

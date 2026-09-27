@@ -8,7 +8,9 @@
  *   Boolean                           -> enumField("true"/"false"; heuristic)
  *   Int / BigInt                      -> intField
  *   Float / Decimal                   -> numberField
- *   String / DateTime / Json / ...    -> SKIPPED (free text is not JJB's job)
+ *   String                            -> stringField (free-text span extraction)
+ *   DateTime                          -> dateField
+ *   Json / others                     -> SKIPPED
  *   lists, relations, composites      -> SKIPPED
  *
  * Optionality: `Type?` or `@default(...)` -> `optional: true`. Primary keys
@@ -17,9 +19,11 @@
  */
 
 import {
+  dateField,
   enumField,
   intField,
   numberField,
+  stringField,
   type Field,
   type FieldOptions,
   type Schema,
@@ -149,7 +153,7 @@ export function parsePrisma(source: string): {
 
 function buildOptions(
   field: PrismaField,
-  kind: "enum" | "boolean" | "int" | "number",
+  kind: "enum" | "boolean" | "int" | "number" | "string" | "date",
   optional: boolean,
 ): FieldOptions {
   const question =
@@ -217,8 +221,29 @@ function mapField(
     };
   }
 
+  if (field.type === "String") {
+    return {
+      field: stringField(buildOptions(field, "string", field.isOptional)),
+      diagnostics: [
+        {
+          path,
+          message:
+            "free-text stringField — span extraction quality depends on input phrasing",
+          level: "heuristic",
+        },
+      ],
+    };
+  }
+
+  if (field.type === "DateTime") {
+    return {
+      field: dateField(buildOptions(field, "date", field.isOptional)),
+      diagnostics: [],
+    };
+  }
+
   return skip(
-    `skipped: scalar "${field.type}" has no closed set (free text is not JJB's job)`,
+    `skipped: scalar "${field.type}" is not a flat JJB field slot`,
   );
 }
 

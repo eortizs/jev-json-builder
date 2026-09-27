@@ -64,12 +64,13 @@ The Level-1 router turns JJB into a **hybrid orchestration framework (System 1 +
 | Optional field | `{ optional: true }` → `noul` `<name>_stated` | Field omitted when not stated |
 | Ordered level / bucket | `scoreField(levels, opts)` → `score` | Score = position on your level spectrum (float 0..N-1) |
 | Arbitrary number | `intField` / `numberField` → regex candidates + `choice` | Code normalizes the selected verbatim value |
-| Free text | Not JJB's job | Pass through or route to a generative model |
+| Free text | `stringField` → span-pool extraction + `choice` selector | Quoted spans, ES/EN triggers, key–value pairs, clauses; Jev picks the span, code copies it verbatim |
+| Date / time | `dateField` → regex candidates + ISO normalizer | `hoy`/`tomorrow`/`next monday`/`27/09/2026`/`3pm` → deterministic ISO-8601 against an injectable `now` clock |
 
 ### Validation status
 
-- 82 unit tests pass (zero network; mock `TypeSafeClient` via fetch injection).
-- `npx jjb-ingest` generates `defineSchema` blocks (or runtime schemas) from OpenAPI 3.x / Swagger 2.0 / JSON Schema / Prisma specs — no manual mapping code.
-- `npm run demo` serves an interactive **playground** (`/playground`) plus four routes: `/api/animation`, `/api/triage`, `/api/orders`, `/api/orchestrate` (semantic router: FAST → JJB, COMPLEX → injected agent) — each response carries the typed payload and `meta` (model, raw answers with probabilities + confidence, token usage, `elapsedMs`).
+- 124 unit tests pass (zero network; mock `TypeSafeClient` via fetch injection), including a full NestJS `@nestjs/testing` roundtrip.
+- `npx jjb-ingest` generates `defineSchema` blocks (or runtime schemas) from OpenAPI 3.x / Swagger 2.0 / JSON Schema / Prisma specs — no manual mapping code. Free-text strings map to `stringField`, date formats / `DateTime` map to `dateField`.
+- `npm run demo` serves an interactive **playground** (`/playground`) plus five routes: `/api/animation`, `/api/triage`, `/api/orders`, `/api/leads`, `/api/orchestrate` (semantic router: FAST → JJB, COMPLEX → injected agent) — each response carries the typed payload and `meta` (model, raw answers with probabilities + confidence, token usage, `elapsedMs`).
 - `demo/benchmark.ts` measures JJB end-to-end (p50/p95 wall, `systemOne` time, tokens) with optional generative-LLM baseline; mock mode isolates pipeline overhead, and without `LLM_API_KEY` it prints a labeled heuristic estimate instead of fabricated numbers.
 - Live run requires `TYPESAFE_API_KEY`; without it, requests return 502 `jev_upstream_error`.

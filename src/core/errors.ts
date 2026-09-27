@@ -12,6 +12,7 @@ export type JevErrorCode =
   | "jev_ambiguous"
   | "jev_missing_candidate"
   | "jev_invalid_number"
+  | "jev_invalid_date"
   | "jev_upstream_error";
 
 export type GateKind = "hazard" | "ambiguity";

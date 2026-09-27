@@ -7,7 +7,7 @@ import {
   jevBody,
 } from "../src/index.js";
 import { ans, createMockClient } from "../src/testing/mockClient.js";
-import { animationSchema, buildDemoApp, orderSchema, triageSchema } from "./server.js";
+import { animationSchema, buildDemoApp, leadSchema, orderSchema, triageSchema } from "./server.js";
 
 const app = express();
 app.use(express.json());
@@ -62,6 +62,24 @@ app.post(
   },
 );
 
+app.post(
+  "/api/leads",
+  jevBody(leadSchema, {
+    client: createMockClient({
+      name: ans.choice("n0"),
+      name_candidates: ans.choice("n0"),
+      complaint: ans.choice("n1"),
+      complaint_candidates: ans.choice("n1"),
+      complaint_stated: ans.noul(0.9),
+      followUpAt_stated: ans.noul(0.1),
+      _hazard: ans.noul(0.05),
+    }),
+  }),
+  (req, res) => {
+    res.json({ payload: getPayload(req, leadSchema), meta: req.jevMeta });
+  },
+);
+
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   if (err instanceof JevBodyError) {
     return res.status(err.status).json(err.body);
@@ -91,6 +109,13 @@ const orders = await request(app)
     prompt: "Quiero pedir 2 laptops con envío express y que venga envuelto para regalo",
   });
 console.log("ORDERS", orders.status, orders.body.payload, `(${orders.body.meta.elapsedMs}ms)`);
+
+const leads = await request(app)
+  .post("/api/leads")
+  .send({
+    prompt: 'se llama "Ana García", complaint: pantalla rota, follow-up mañana a las 3pm',
+  });
+console.log("LEADS", leads.status, leads.body.payload, `(${leads.body.meta.elapsedMs}ms)`);
 
 const demoApp = buildDemoApp();
 const health = await request(demoApp).get("/healthz");

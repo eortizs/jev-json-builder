@@ -52,7 +52,7 @@ describe("jsonSchemaToSchema", () => {
     expect(diagnostics).toHaveLength(0);
   });
 
-  it("skips free-text strings and nested structures with diagnostics", () => {
+  it("maps free-text strings to stringField and skips nested structures", () => {
     const { schema, diagnostics } = jsonSchemaToSchema({
       type: "object",
       required: [],
@@ -64,15 +64,32 @@ describe("jsonSchemaToSchema", () => {
       },
     });
 
-    expect(Object.keys(schema)).toEqual(["ok"]);
+    expect(Object.keys(schema)).toEqual(["note", "ok"]);
+    expect(schema.note?.kind).toBe("string");
+    expect(schema.note?.options.question).toBe("Free text");
     expect(schema.ok?.kind).toBe("enum");
     const skipped = diagnostics.filter((d) => d.level === "skipped");
     expect(skipped.map((d) => d.path)).toEqual([
-      "properties.note",
       "properties.tags",
       "properties.meta",
     ]);
     expect(diagnostics.some((d) => d.level === "heuristic")).toBe(true);
+  });
+
+  it("maps date formats to dateField ahead of the string mapping", () => {
+    const { schema, diagnostics } = jsonSchemaToSchema({
+      type: "object",
+      properties: {
+        when: { type: "string", format: "date-time", description: "When?" },
+        day: { type: "string", format: "date" },
+        clock: { type: "string", format: "time" },
+      },
+    });
+    expect(schema.when?.kind).toBe("date");
+    expect(schema.day?.kind).toBe("date");
+    expect(schema.clock?.kind).toBe("date");
+    expect(diagnostics.filter((d) => d.level === "heuristic").length).toBe(3);
+    expect(diagnostics.some((d) => d.message.includes('format "date-time"'))).toBe(true);
   });
 
   it("honors x-jev vendor extensions", () => {
@@ -192,9 +209,11 @@ describe("ingestOpenApi", () => {
       "shipping",
       "quantity",
       "giftWrap",
+      "note",
     ]);
     expect(createOrder.schema.giftWrap?.options.optional).toBe(true);
     expect(createOrder.schema.quantity?.options.optional).toBeUndefined();
+    expect(createOrder.schema.note?.kind).toBe("string");
     if (createOrder.schema.product?.kind === "enum") {
       expect(createOrder.schema.product.criteria.laptop).toBe("A laptop computer (portátil)");
     }
@@ -250,7 +269,8 @@ describe("ingestOpenApi", () => {
     expect(names).toContain("addPet");
 
     const newPet = output.sources.find((s) => s.name === "NewPet")!;
-    expect(Object.keys(newPet.schema)).toEqual(["tag"]);
+    expect(Object.keys(newPet.schema)).toEqual(["name", "tag"]);
+    expect(newPet.schema.name?.kind).toBe("string");
   });
 });
 
@@ -265,21 +285,31 @@ describe("ingestPrisma", () => {
     );
   });
 
-  it("maps scalars and skips generated keys / free text", () => {
+  it("maps scalars and skips generated keys", () => {
     const output = ingestPrisma(ticketPrisma);
     const ticket = output.sources.find((s) => s.name === "Ticket")!;
 
-    expect(Object.keys(ticket.schema).sort()).toEqual(["amount", "category", "refund"]);
+    expect(Object.keys(ticket.schema).sort()).toEqual([
+      "amount",
+      "category",
+      "createdAt",
+      "refund",
+      "title",
+    ]);
     expect(ticket.schema.category?.kind).toBe("enum");
     expect(ticket.schema.amount?.kind).toBe("int");
     expect(ticket.schema.amount?.options.optional).toBe(true);
     expect(ticket.schema.refund?.kind).toBe("enum");
+    expect(ticket.schema.title?.kind).toBe("string");
+    expect(ticket.schema.title?.options.optional).toBeUndefined();
+    expect(ticket.schema.createdAt?.kind).toBe("date");
+    expect(ticket.schema.createdAt?.options.optional).toBe(true);
 
     const skipped = ticket.diagnostics.filter((d) => d.level === "skipped");
     const skippedPaths = skipped.map((d) => d.path);
     expect(skippedPaths).toContain("models.Ticket.id");
-    expect(skippedPaths).toContain("models.Ticket.title");
-    expect(skippedPaths).toContain("models.Ticket.createdAt");
+    expect(skippedPaths).not.toContain("models.Ticket.title");
+    expect(skippedPaths).not.toContain("models.Ticket.createdAt");
   });
 
   it("uses doc comments as question text", () => {
@@ -298,11 +328,14 @@ describe("renderSchemaSource", () => {
     const source = ingestOpenApiSchema(JSON.parse(ordersSpec), "CreateOrder");
     const code = renderSchemaSource(source);
 
-    expect(code).toContain('import { defineSchema, enumField, intField } from "jev-json-builder";');
+    expect(code).toContain(
+      'import { defineSchema, enumField, intField, stringField } from "jev-json-builder";',
+    );
     expect(code).toContain("export const createOrderSchema = defineSchema({");
     expect(code).toContain("product: enumField(");
     expect(code).toContain('"laptop": "A laptop computer (portátil)"');
     expect(code).toContain("quantity: intField({ question:");
+    expect(code).toContain("note: stringField({");
     expect(code).toContain("optional: true");
     expect(code).toContain("Source: components.schemas.CreateOrder");
   });
@@ -310,7 +343,9 @@ describe("renderSchemaSource", () => {
   it("renders multiple sources with one deduplicated import", () => {
     const output = ingest(ticketPrisma);
     const code = renderSchemaSources(output.sources, { header: false });
-    expect(code).toContain('import { defineSchema, enumField, intField } from "jev-json-builder";');
+    expect(code).toContain(
+      'import { defineSchema, enumField, intField, stringField, dateField } from "jev-json-builder";',
+    );
     expect(code).toContain("export const ticketSchema = defineSchema({");
   });
 
@@ -403,6 +438,9 @@ describe("end-to-end: ingest -> jevBody roundtrip", () => {
           amount_stated: ans.noul(0.95),
           refund: ans.choice("true"),
           refund_stated: ans.noul(0.9),
+          title: ans.choice("n0"),
+          title_candidates: ans.choice("n0"),
+          createdAt_stated: ans.noul(0.1),
           _hazard: ans.noul(0.01),
         }),
       }),
@@ -420,6 +458,7 @@ describe("end-to-end: ingest -> jevBody roundtrip", () => {
       category: "billing",
       amount: 50,
       refund: "true",
+      title: "billing complaint",
     });
   });
 });

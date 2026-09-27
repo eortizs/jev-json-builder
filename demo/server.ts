@@ -6,6 +6,7 @@ import express from "express";
 
 import {
   JevBodyError,
+  dateField,
   defineSchema,
   enumField,
   getPayload,
@@ -14,6 +15,7 @@ import {
   jevBody,
   jevRouter,
   scoreField,
+  stringField,
   type JevMeta,
 } from "../src/index.js";
 
@@ -94,6 +96,12 @@ export const orderSchema = defineSchema({
   ),
 });
 
+export const leadSchema = defineSchema({
+  name: stringField({ question: "What is the customer's name?" }),
+  complaint: stringField({ question: "What is the complaint?", optional: true }),
+  followUpAt: dateField({ question: "When should we follow up?", optional: true }),
+});
+
 type RouteMeta = Pick<JevMeta, "model" | "usage" | "elapsedMs" | "answers">;
 
 function metaView(meta: JevMeta): RouteMeta {
@@ -128,6 +136,11 @@ export function buildDemoApp(): express.Express {
 
   app.post("/api/orders", jevBody(orderSchema), (req, res) => {
     const payload = getPayload(req, orderSchema);
+    res.json({ payload, meta: metaView(req.jevMeta!) });
+  });
+
+  app.post("/api/leads", jevBody(leadSchema), (req, res) => {
+    const payload = getPayload(req, leadSchema);
     res.json({ payload, meta: metaView(req.jevMeta!) });
   });
 
@@ -184,6 +197,7 @@ if (isMainModule) {
     console.log("  POST /api/animation");
     console.log("  POST /api/triage");
     console.log("  POST /api/orders");
+    console.log("  POST /api/leads");
     console.log("  POST /api/orchestrate  (semantic router: FAST → JJB, COMPLEX → onComplex)");
   });
 }

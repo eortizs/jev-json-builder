@@ -17,10 +17,18 @@ import {
   type Schema,
 } from "./schema.js";
 import { JevBodyError } from "./errors.js";
+import { candidateIndexFromKey } from "./candidates.js";
+import { normalizeDate } from "./dates.js";
 import type { AnswerMap, JevMeta } from "./types.js";
 
 export type AssembleOptions = {
   statedThreshold: number;
+  /** Shared free-text span pool for stringField selection. */
+  spanCandidates?: string[];
+  /** Shared date span pool for dateField selection. */
+  dateCandidates?: string[];
+  /** Clock for relative date resolution (default: current time). */
+  now?: (() => Date) | undefined;
 };
 
 export function assemble<S extends Schema>(
@@ -59,6 +67,19 @@ export function assemble<S extends Schema>(
         );
         continue;
       }
+      if (field.kind === "string") {
+        payload[name] = pickString(name, answers, options.spanCandidates ?? []);
+        continue;
+      }
+      if (field.kind === "date") {
+        payload[name] = pickDate(
+          name,
+          answers,
+          options.dateCandidates ?? [],
+          options.now,
+        );
+        continue;
+      }
     }
 
     // Required fields.
@@ -69,6 +90,21 @@ export function assemble<S extends Schema>(
         ans,
         answers,
         numericCandidates[name] ?? [],
+      );
+      continue;
+    }
+
+    if (field.kind === "string") {
+      payload[name] = pickString(name, answers, options.spanCandidates ?? []);
+      continue;
+    }
+
+    if (field.kind === "date") {
+      payload[name] = pickDate(
+        name,
+        answers,
+        options.dateCandidates ?? [],
+        options.now,
       );
       continue;
     }
@@ -177,4 +213,91 @@ function pickNumeric(
   }
 
   return field.kind === "int" ? Math.floor(parsed) : parsed;
+}
+
+/** Select the chosen free-text span and normalize to a trimmed string. */
+function pickString(
+  name: string,
+  answers: AnswerMap,
+  pool: string[],
+): string {
+  if (pool.length === 0) {
+    throw new JevBodyError(
+      400,
+      "jev_missing_candidate",
+      `No text candidate found for field "${name}" despite being stated.`,
+      { field: name },
+    );
+  }
+
+  let raw: string;
+  if (pool.length === 1) {
+    raw = pool[0]!;
+  } else {
+    const c = answers[`${name}_candidates`];
+    if (!c || c.type !== "choice") {
+      throw new JevBodyError(
+        422,
+        "jev_ambiguous",
+        `Multi-candidate selector missing for field "${name}".`,
+        { field: name },
+      );
+    }
+    const idx = candidateIndexFromKey(c.choice);
+    if (idx === undefined || idx >= pool.length) {
+      throw new JevBodyError(
+        422,
+        "jev_ambiguous",
+        `Invalid candidate index for field "${name}".`,
+        { field: name },
+      );
+    }
+    raw = pool[idx]!;
+  }
+
+  return raw.trim();
+}
+
+/** Select the chosen date span and normalize it to ISO-8601. */
+function pickDate(
+  name: string,
+  answers: AnswerMap,
+  pool: string[],
+  now: (() => Date) | undefined,
+): string {
+  if (pool.length === 0) {
+    throw new JevBodyError(
+      400,
+      "jev_missing_candidate",
+      `No date candidate found for field "${name}" despite being stated.`,
+      { field: name },
+    );
+  }
+
+  let raw: string;
+  if (pool.length === 1) {
+    raw = pool[0]!;
+  } else {
+    const c = answers[`${name}_candidates`];
+    if (!c || c.type !== "choice") {
+      throw new JevBodyError(
+        422,
+        "jev_ambiguous",
+        `Multi-candidate selector missing for field "${name}".`,
+        { field: name },
+      );
+    }
+    const idx = candidateIndexFromKey(c.choice);
+    if (idx === undefined || idx >= pool.length) {
+      throw new JevBodyError(
+        422,
+        "jev_ambiguous",
+        `Invalid candidate index for field "${name}".`,
+        { field: name },
+      );
+    }
+    raw = pool[idx]!;
+  }
+
+  return normalizeDate(raw, now?.(), name).iso;
 }

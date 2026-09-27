@@ -13,7 +13,7 @@ For the conceptual overview see [`overview.md`](./overview.md).
 ```bash
 npm install
 npm run typecheck   # strict TS
-npm test            # 33 mocked tests
+npm test            # 124 mocked tests
 npm run demo        # express on :3000 (override with PORT)
 ```
 
@@ -171,7 +171,7 @@ openapi.json                        jjb-ingest                   orderSchema.ts
 ```ts
 // Generated — review the question wording, then ship it:
 // (this is the actual output for examples/orders.openapi.json)
-import { defineSchema, enumField, intField } from "jev-json-builder";
+import { defineSchema, enumField, intField, stringField } from "jev-json-builder";
 
 export const createOrderSchema = defineSchema({
   product: enumField(
@@ -199,6 +199,10 @@ export const createOrderSchema = defineSchema({
     },
     { question: "Does the user want the order gift-wrapped?", optional: true },
   ),
+  note: stringField({
+    question: "Free-text note (not extractable by JJB)",
+    optional: true,
+  }),
 });
 ```
 
@@ -232,8 +236,11 @@ export const createOrderSchema = defineSchema({
 | `number` (`Float`, `Decimal`) | `numberField` | Same, no integer flooring |
 | `boolean` (`Boolean`) | `enumField` `"true"`/`"false"` | JJB enum payloads are strings (heuristic diagnostic) |
 | `oneOf`/`anyOf` of `const`/`enum` | `enumField` | Variants merged into one closed set |
+| `string` + `format: date-time` / `date` / `time` | `dateField` | Regex candidates + ISO-8601 normalizer (takes precedence over the plain string mapping) |
+| `string` free text (`String` in Prisma) | `stringField` | Span-pool candidates + choice selector (heuristic diagnostic) |
+| `DateTime` (Prisma) | `dateField` | Same date pipeline |
 | nullable / absent from `required` | `{ optional: true }` | Omitted when the user did not state it |
-| `string` (free text), arrays, nested objects | **skipped** | Free text is not JJB's job — route it to `onComplex` or pass it through |
+| arrays, nested objects, `Json` scalars | **skipped** | Flat payloads only — route them to `onComplex` or pass them through |
 | `@id @default(uuid()/cuid()/autoincrement())` (Prisma) | **skipped** | Server-assigned keys |
 
 Every skip and heuristic is reported as a diagnostic (in the generated header comment and on CLI stderr), so nothing is dropped silently.
@@ -306,6 +313,18 @@ numberField({ question: string; optional?: boolean; threshold?: number }): Numbe
 
 For arbitrary numeric values: regex finds 1–6 digit candidates in the input, a `choice` selects the right one when ≥ 2 candidates, then code normalizes the verbatim span (`Math.floor` for `intField`).
 
+```ts
+stringField({ question: string; optional?: boolean; threshold?: number }): StringField;
+```
+
+Free text: a shared span pool is extracted from the input (quoted spans, ES/EN trigger phrases like "se llama Ana" / "description: ...", key–value pairs, clause segments). With a single candidate it is used verbatim (trimmed); with ≥ 2 a `<name>_candidates` choice lets Jev pick the right span. Span heuristics are best-effort — the `choice` question is the disambiguator, and low confidence flows through the ambiguity gate like every other field.
+
+```ts
+dateField({ question: string; optional?: boolean; threshold?: number }): DateField;
+```
+
+Dates/times: regex candidates cover ISO (`2026-09-27`, `2026-09-27T15:00`, `2026-09-27 15:00`), numeric (`27/09/2026`, `27-09-26`), times (`15:00`, `3pm`, `3:30 pm`), relative days (`hoy`/`today`, `mañana`/`tomorrow`, `pasado mañana`, `next monday`/`próximo lunes`, bare weekdays) and combined forms (`mañana a las 3pm`, `next monday 10:00`). A deterministic normalizer resolves relative days against an injectable `now` clock and emits ISO-8601 — `YYYY-MM-DD` for day-only spans, `YYYY-MM-DDTHH:mm` when a time is present (local wall-clock; spans rarely carry a timezone). Out-of-range calendar/clock parts raise `422 jev_invalid_date`.
+
 `optional: true` adds a paired `noul` `<name>_stated` and causes the field to be **omitted** when the user did not state it.
 
 ### `jevBody(spec, options?): RequestHandler`
@@ -318,6 +337,7 @@ For arbitrary numeric values: regex finds 1–6 digit candidates in the input, a
 | `threshold` | `0.85` | Default ambiguity confidence threshold. |
 | `fieldThresholds` | `{}` | Per-field overrides for the ambiguity threshold. |
 | `statedThreshold` | `0.7` | Stated noul threshold above which an optional field is included. |
+| `now` | current time | Clock for `dateField` relative-date resolution (`hoy`, `tomorrow`, `next monday`, ...). |
 | `input` | `req.body.prompt \|\| req.body.text` | Custom input extractor. |
 | `onReject` | — | Hook returning an optional fallback payload when a gate fails. |
 
@@ -345,10 +365,11 @@ The demo routes return it as `meta` so the playground can render probabilities, 
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `jev_missing_input` | Empty input text. |
-| 400 | `jev_missing_candidate` | Optional numeric field stated but no numeric candidates found. |
+| 400 | `jev_missing_candidate` | Stated numeric/string/date field but no candidates found. |
 | 422 | `jev_hazard` | Hazard `noul` above threshold. |
 | 422 | `jev_ambiguous` | One or more fields below confidence threshold. |
 | 422 | `jev_invalid_number` | Multi-candidate selector missing / non-normalizable number. |
+| 422 | `jev_invalid_date` | Date span with out-of-range calendar/clock parts. |
 | 502 | `jev_upstream_error` | Upstream TypeSafe SDK/API error. |
 
 The error body is JSON-serializable:
@@ -520,6 +541,58 @@ Helper constructors: `ans.choice(choice, confidence, probabilities?)`, `ans.scor
 
 ---
 
+## NestJS support (`jev-json-builder/nest`)
+
+The same pipeline ships as NestJS decorators behind a dedicated subpath. `@nestjs/common` is an **optional peer dependency** — Express-only consumers never load it, and importing the root entry point never touches Nest.
+
+```bash
+npm i jev-json-builder
+npm i @nestjs/common          # only for Nest apps
+```
+
+Your `tsconfig.json` needs the standard Nest compiler options (every Nest app already has them):
+
+```json
+{ "compilerOptions": { "experimentalDecorators": true, "emitDecoratorMetadata": true } }
+```
+
+Usage — mirror image of the Express middleware:
+
+```ts
+import "reflect-metadata";
+import { Controller, Module, Post } from "@nestjs/common";
+import { defineSchema, stringField, dateField, intField } from "jev-json-builder";
+import { JevBody, JevPayload } from "jev-json-builder/nest";
+import type { PayloadOf } from "jev-json-builder";
+
+const leadSchema = defineSchema({
+  name: stringField({ question: "What is the customer's name?" }),
+  followUpAt: dateField({ question: "When should we follow up?", optional: true }),
+  sizePx: intField({ question: "size in pixels", optional: true }),
+});
+type LeadPayload = PayloadOf<typeof leadSchema>;
+
+@Controller()
+class LeadController {
+  @Post("leads")
+  @JevBody(leadSchema, { now: () => new Date() })
+  create(@JevPayload(leadSchema) payload: LeadPayload): LeadPayload {
+    return payload; // { name, followUpAt?, sizePx? } — fully typed
+  }
+}
+
+@Module({ controllers: [LeadController] })
+class LeadModule {}
+```
+
+- `@JevBody(spec, options)` runs the full pipeline (candidate pools → single `systemOne` → dual gates → typed assembly) in a Nest interceptor and stores the result on `req.jev` / `req.jevMeta`. It accepts the same options as `jevBody` except Express-specific hooks (`input` extractor included).
+- `@JevPayload(spec?)` injects the typed payload into the handler. The argument is optional and exists purely for type inference — always use the decorator **with parentheses** (`@JevPayload()` / `@JevPayload(spec)`), matching Nest conventions.
+- Failures rethrow as `HttpException(err.body, err.status)`, so `jev_hazard` / `jev_ambiguous` / `jev_invalid_date` render the same JSON diagnostics body through Nest's exception layer.
+
+See `tests/nest.test.ts` for a full `@nestjs/testing` + supertest roundtrip.
+
+---
+
 ## Roadmap
 
 - [x] Express middleware with `jevBody(spec)` + `getPayload(req, spec)`.
@@ -534,9 +607,9 @@ Helper constructors: `ans.choice(choice, confidence, probabilities?)`, `ans.scor
 - [x] Benchmark harness (JJB vs generative LLM, mock + live modes).
 - [x] Semantic router (`jevRouter` / `semanticRouter`) with System Two `onComplex` handoff and perimeter hazard gate.
 - [x] Schema ingestion (`jjb-ingest`) from OpenAPI 3.x / Swagger 2.0 / JSON Schema / Prisma, with Zod via JSON Schema conversion.
-- [ ] NestJS decorator wrapper (`@JevBody()`) on the same core.
-- [ ] Date / time extraction (regex candidates + `noul` ordering).
-- [ ] Free-text passthrough fields.
+- [x] NestJS decorator wrapper (`@JevBody()` / `@JevPayload()`) on the same core (`jev-json-builder/nest`, optional peer).
+- [x] Date / time extraction (`dateField`: regex candidates + deterministic ISO-8601 normalizer with injectable `now`).
+- [x] Free-text fields (`stringField`: span-pool candidates + `choice` selector).
 
 ---
 

@@ -7,6 +7,8 @@
  *   - scoreField -> Score question; output is a float level position (0..N-1).
  *   - intField   -> Pre-parsed numeric candidates + optional Choice selector.
  *   - numberField-> Same as intField but no integer flooring.
+ *   - stringField-> Free-text span candidates + optional Choice selector.
+ *   - dateField  -> Date/time candidates + deterministic ISO-8601 normalizer.
  *
  * Any field can be marked optional, which adds a Noul `<name>_stated` presence
  * gate and causes the field to be omitted from the payload when the user did
@@ -46,11 +48,23 @@ export type NumberField = {
   options: FieldOptions;
 };
 
+export type StringField = {
+  kind: "string";
+  options: FieldOptions;
+};
+
+export type DateField = {
+  kind: "date";
+  options: FieldOptions;
+};
+
 export type Field =
   | EnumField<string>
   | ScoreField
   | IntField
-  | NumberField;
+  | NumberField
+  | StringField
+  | DateField;
 
 export type Schema = Record<string, Field>;
 
@@ -77,7 +91,11 @@ type ValueOf<F extends Field> = F extends EnumField<infer T>
       ? number
       : F extends NumberField
         ? number
-        : never;
+        : F extends StringField
+          ? string
+          : F extends DateField
+            ? string
+            : never;
 
 export type DefinedSchema =
   | Schema
@@ -143,6 +161,16 @@ export function intField(options: FieldOptions): IntField {
 /** Build a float numeric field (pre-parsed candidates + optional Choice). */
 export function numberField(options: FieldOptions): NumberField {
   return { kind: "number", options };
+}
+
+/** Build a free-text field (span-pool candidates + optional Choice selector). */
+export function stringField(options: FieldOptions): StringField {
+  return { kind: "string", options };
+}
+
+/** Build a date/time field (date candidates + ISO-8601 normalizer). */
+export function dateField(options: FieldOptions): DateField {
+  return { kind: "date", options };
 }
 
 /** Default hazard question wording. Override via schema config or middleware option. */

@@ -90,7 +90,7 @@ describe("jjb-ingest CLI", () => {
     expect(code).toBe(0);
     expect(stdout).toContain("export const createOrderSchema = defineSchema({");
     expect(stdout).toContain("product: enumField(");
-    expect(stdout).toContain('import { defineSchema, enumField, intField } from "jev-json-builder";');
+    expect(stdout).toContain('import { defineSchema, enumField, intField, stringField } from "jev-json-builder";');
   });
 
   it("writes a file and reports diagnostics on stderr", () => {

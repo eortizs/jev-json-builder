@@ -52,6 +52,10 @@ function renderField(field: Field, indent: string, markOptional: boolean): strin
       return `intField(${opts})`;
     case "number":
       return `numberField(${opts})`;
+    case "string":
+      return `stringField(${opts})`;
+    case "date":
+      return `dateField(${opts})`;
   }
 }
 
@@ -71,9 +75,23 @@ function usedConstructors(schema: Schema): string[] {
       case "number":
         used.add("numberField");
         break;
+      case "string":
+        used.add("stringField");
+        break;
+      case "date":
+        used.add("dateField");
+        break;
     }
   }
-  const order = ["defineSchema", "enumField", "scoreField", "intField", "numberField"];
+  const order = [
+    "defineSchema",
+    "enumField",
+    "scoreField",
+    "intField",
+    "numberField",
+    "stringField",
+    "dateField",
+  ];
   return order.filter((name) => used.has(name));
 }
 
@@ -101,7 +119,15 @@ export function renderSchemaSources(
   for (const source of sources) {
     for (const name of usedConstructors(source.schema)) used.add(name);
   }
-  const order = ["defineSchema", "enumField", "scoreField", "intField", "numberField"];
+  const order = [
+    "defineSchema",
+    "enumField",
+    "scoreField",
+    "intField",
+    "numberField",
+    "stringField",
+    "dateField",
+  ];
   const imports = order.filter((name) => used.has(name));
 
   const parts: string[] = [];

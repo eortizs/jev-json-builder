@@ -8,6 +8,8 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["node"]

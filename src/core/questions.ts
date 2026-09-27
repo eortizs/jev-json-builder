@@ -20,6 +20,8 @@ import {
 } from "@typesafe-ai/sdk";
 
 import { candidateIndexFromKey, numericCandidates } from "./candidates.js";
+import { spanCandidates } from "./spans.js";
+import { extractDateCandidates } from "./dates.js";
 import { DEFAULT_HAZARD_QUESTION } from "./schema.js";
 import type { Schema } from "./schema.js";
 import { resolveDefined, type DefinedSchema } from "./schema.js";
@@ -34,6 +36,10 @@ export type BuiltQuestions = {
   questions: Questions;
   /** Per-field numeric candidates (verbatim digit strings). */
   numericCandidates: Record<string, string[]>;
+  /** Shared free-text span pool extracted from the input. */
+  spanCandidates: string[];
+  /** Shared date/time span pool extracted from the input. */
+  dateCandidates: string[];
 };
 
 export function buildQuestions({
@@ -43,6 +49,8 @@ export function buildQuestions({
 }: BuildQuestionsInput): BuiltQuestions {
   const { schema, config } = resolveDefined(defined);
   const numericCandidatesByField: Record<string, string[]> = {};
+  const spans = spanCandidates(inputText);
+  const dates = extractDateCandidates(inputText);
 
   const questions: Record<string, Question> = {};
 
@@ -64,14 +72,31 @@ export function buildQuestions({
         const cands = numericCandidates(inputText);
         numericCandidatesByField[name] = cands;
         if (cands.length >= 2) {
-          const options: Record<string, string> = {};
-          cands.forEach((n, i) => {
-            options[`n${i}`] = `The number ${n}`;
-          });
-          questions[`${name}_candidates`] = choice(
+          questions[`${name}_candidates`] = candidateChoice(
             `Which stated number is ${field.options.question.toLowerCase()}?`,
-            options,
-          ) as Question;
+            cands,
+            (n) => `The number ${n}`,
+          );
+        }
+        break;
+      }
+      case "string": {
+        if (spans.length >= 2) {
+          questions[`${name}_candidates`] = candidateChoice(
+            `Which stated text is ${field.options.question.toLowerCase()}?`,
+            spans,
+            (span) => `The text ${span}`,
+          );
+        }
+        break;
+      }
+      case "date": {
+        if (dates.length >= 2) {
+          questions[`${name}_candidates`] = candidateChoice(
+            `Which stated date is ${field.options.question.toLowerCase()}?`,
+            dates,
+            (date) => `The date ${date}`,
+          );
         }
         break;
       }
@@ -92,7 +117,25 @@ export function buildQuestions({
     questions["_hazard"] = noul(hazardOverride) as Question;
   }
 
-  return { questions, numericCandidates: numericCandidatesByField };
+  return {
+    questions,
+    numericCandidates: numericCandidatesByField,
+    spanCandidates: spans,
+    dateCandidates: dates,
+  };
+}
+
+/** Build a candidate-selector Choice question over an ordered pool. */
+function candidateChoice(
+  question: string,
+  pool: string[],
+  label: (candidate: string) => string,
+): Question {
+  const options: Record<string, string> = {};
+  pool.forEach((candidate, i) => {
+    options[`n${i}`] = label(candidate);
+  });
+  return choice(question, options) as Question;
 }
 
 /** Validates that a candidate choice key is well-formed and in range. */

@@ -5,6 +5,8 @@ export {
   scoreField,
   intField,
   numberField,
+  stringField,
+  dateField,
   DEFAULT_AMBIGUITY_THRESHOLD,
   DEFAULT_HAZARD_THRESHOLD,
   DEFAULT_HAZARD_QUESTION,
@@ -20,6 +22,8 @@ export {
   type ScoreField,
   type IntField,
   type NumberField,
+  type StringField,
+  type DateField,
   type HazardConfig,
 } from "./core/schema.js";
 
@@ -27,6 +31,15 @@ export {
   numericCandidates,
   candidateIndexFromKey,
 } from "./core/candidates.js";
+
+export { spanCandidates } from "./core/spans.js";
+
+export {
+  extractDateCandidates,
+  normalizeDate,
+  validateDateParts,
+  type NormalizedDate,
+} from "./core/dates.js";
 
 export {
   buildQuestions,
@@ -55,6 +68,12 @@ export {
 } from "./core/errors.js";
 
 export type { AnswerMap, Answer, JevUsage, JevMeta } from "./core/types.js";
+
+export {
+  runJevPipeline,
+  type JevPipelineOptions,
+  type JevPipelineResult,
+} from "./core/pipeline.js";
 
 export {
   jevBody,

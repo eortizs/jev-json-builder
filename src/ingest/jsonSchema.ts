@@ -7,7 +7,8 @@
  *   integer                    -> intField
  *   number                     -> numberField
  *   boolean                    -> enumField("true"/"false"; heuristic diag)
- *   string without enum        -> SKIPPED (free text is not JJB's job)
+ *   string + date format       -> dateField (format "date-time" | "date" | "time")
+ *   string without enum        -> stringField (free-text span extraction)
  *   array / object / others    -> SKIPPED (flat payloads only)
  *
  * Optionality: property absent from the parent `required` list, or nullable
@@ -23,10 +24,12 @@
  */
 
 import {
+  dateField,
   enumField,
   intField,
   numberField,
   scoreField,
+  stringField,
   type Field,
   type FieldOptions,
   type Schema,
@@ -224,7 +227,7 @@ function skipped(message: string, path: string): MappedField {
 
 function buildOptions(
   name: string,
-  kind: "enum" | "boolean" | "int" | "number" | "score",
+  kind: "enum" | "boolean" | "int" | "number" | "score" | "string" | "date",
   node: JsonSchemaNode,
   optional: boolean,
 ): { options: FieldOptions; diagnostics: IngestDiagnostic[] } {
@@ -361,10 +364,34 @@ function mapProperty(
   }
 
   if (type === "string") {
-    return skipped(
-      "skipped: free-text string (JJB extracts closed-set/numeric values only)",
-      path,
-    );
+    const format = effective["format"];
+    if (format === "date-time" || format === "date" || format === "time") {
+      const { options, diagnostics } = buildOptions(name, "date", effective, optional);
+      return {
+        field: dateField(options),
+        diagnostics: [
+          ...diagnostics,
+          {
+            path,
+            message: `mapped to dateField via format "${format}"`,
+            level: "heuristic",
+          },
+        ],
+      };
+    }
+    const { options, diagnostics } = buildOptions(name, "string", effective, optional);
+    return {
+      field: stringField(options),
+      diagnostics: [
+        ...diagnostics,
+        {
+          path,
+          message:
+            "free-text stringField — span extraction quality depends on input phrasing",
+          level: "heuristic",
+        },
+      ],
+    };
   }
 
   return skipped(
