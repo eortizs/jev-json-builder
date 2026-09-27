@@ -17,7 +17,9 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 import { JevBodyError } from "../core/errors.js";
 import {
+  DEFAULT_FALLBACK_DESTINATION,
   DEFAULT_FAST_DESTINATION,
+  DEFAULT_ROUTE_DESTINATIONS,
   type RouteDecision,
   type RouteDestinations,
   semanticRouter,
@@ -61,6 +63,19 @@ export function jevRouter<const S extends DefinedSchema>(
   }
 
   const fastDestination = options.fastDestination ?? DEFAULT_FAST_DESTINATION;
+  const destinations = options.destinations ?? DEFAULT_ROUTE_DESTINATIONS;
+  if (!Object.hasOwn(destinations, fastDestination)) {
+    throw new Error(
+      `jevRouter: fastDestination "${fastDestination}" must be a key in destinations. Pass \`fastDestination\` explicitly when using custom destinations without the "${DEFAULT_FAST_DESTINATION}" label.`,
+    );
+  }
+  const fallbackDestination =
+    options.fallbackDestination ?? DEFAULT_FALLBACK_DESTINATION;
+  if (!Object.hasOwn(destinations, fallbackDestination)) {
+    throw new Error(
+      `jevRouter: fallbackDestination "${fallbackDestination}" must be a key in destinations. Pass \`fallbackDestination\` explicitly when using custom destinations without the "${DEFAULT_FALLBACK_DESTINATION}" label.`,
+    );
+  }
   const bodyHandler = jevBody(spec, options);
 
   return async function jevRouterMiddleware(

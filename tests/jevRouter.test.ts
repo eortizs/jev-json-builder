@@ -215,4 +215,76 @@ describe("jevRouter middleware", () => {
       }),
     ).toThrow(/onComplex/);
   });
+
+  it("throws at construction when custom destinations lack the fast label", () => {
+    expect(() =>
+      jevRouter(animSchema, {
+        client: createMockClient({}),
+        onComplex: (_req, res) => res.json({ agent: true }),
+        destinations: {
+          COMANDO: "A structured command request",
+          AGENTE: "An open conversation",
+        },
+      }),
+    ).toThrow(/fastDestination/);
+  });
+
+  it("throws at construction when custom destinations lack the fallback label", () => {
+    expect(() =>
+      jevRouter(animSchema, {
+        client: createMockClient({}),
+        onComplex: (_req, res) => res.json({ agent: true }),
+        destinations: {
+          COMANDO: "A structured command request",
+          FAST_JSON_PAYLOAD: "fast",
+        },
+        fallbackDestination: "AGENTE",
+      }),
+    ).toThrow(/fallbackDestination/);
+  });
+
+  it("throws at construction when explicit fastDestination is not in destinations", () => {
+    expect(() =>
+      jevRouter(animSchema, {
+        client: createMockClient({}),
+        onComplex: (_req, res) => res.json({ agent: true }),
+        destinations: {
+          FAST_JSON_PAYLOAD: "fast",
+          COMPLEX_LLM_AGENT: "complex",
+        },
+        fastDestination: "MISSING",
+      }),
+    ).toThrow(/fastDestination/);
+  });
+
+  it("routes through the fast path with explicit fastDestination on custom destinations", async () => {
+    const client = createMockClient({
+      route: ans.choice("COMANDO", 0.95, { COMANDO: 0.95, AGENTE: 0.05 }),
+      ...happyBodyAnswers,
+    });
+    const app = express();
+    app.use(express.json());
+    app.post(
+      "/animate",
+      jevRouter(animSchema, {
+        client,
+        onComplex: (_req, res) => res.json({ agent: true }),
+        destinations: {
+          COMANDO: "A structured command request",
+          AGENTE: "An open conversation",
+        },
+        fastDestination: "COMANDO",
+        fallbackDestination: "AGENTE",
+      }),
+      (req, res) => {
+        res.json({ payload: getPayload(req, animSchema), route: req.jevRoute?.destination });
+      },
+    );
+    const res = await request(app)
+      .post("/animate")
+      .send({ prompt: "Make a red square bounce at 200" });
+    expect(res.status).toBe(200);
+    expect(res.body.route).toBe("COMANDO");
+    expect(res.body.payload.color).toBe("red");
+  });
 });

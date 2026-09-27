@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format follows [Kee
 - `stringField`: new "Pool truncation caveat" note — the span pool caps at 10 candidates in document order, so trailing fragments of long, noisy texts never reach the `<name>_candidates` choice question; includes mitigation guidance (quoted spans / explicit `key: value` phrasing, splitting long texts).
 - `jevRouter`: "Planned: `singleCall: true`" design sketch added to the latency note — feasibility (valid merged question map), answers-level assembly refactor, hazard policy merge (single `_hazard` at the stricter threshold), `RouteDecision` contract preservation, COMPLEX token trade-off, and opt-in rollout plan.
 
+## [0.2.1] - 2026-09-27
+
+### Fixed
+
+- **Gates: candidate selectors are now gated.** `evaluateGates` ignored the `<name>_candidates` choice answers that carry the real value for `int`/`number`/`string`/`date` fields with 2+ candidates — a selector with confidence 0.35 sailed into assembly below the schema threshold. Candidate selectors are now gated with the same per-field threshold (`fieldThresholds[field] ?? ambiguityThreshold`) and reported in `jev_ambiguous` diagnostics as `<name>_candidates`.
+- **`jevRouter`: construction-time validation of `fastDestination`/`fallbackDestination`.** Passing custom `destinations` without the `FAST_JSON_PAYLOAD` label (and without an explicit `fastDestination`) previously made every request fall through to `onComplex` silently; the middleware now throws at construction when either resolved label is not a key of `destinations` (same style as the `semanticRouter` `fallbackDestination` check).
+- `semanticRouter`: removed the dead `fastDestination` local computed from `destinations` (only `jevRouter` resolves the fast label, from options).
+- `prepare: "tsc"` script — installing from git now compiles `dist/` automatically.
+
 ## [0.2.0] - 2026-09-27
 
 ### Added

@@ -68,6 +68,49 @@ describe("evaluateGates", () => {
     ).not.toThrow();
   });
 
+  it("gates low-confidence candidate selectors (int/string/date fields)", () => {
+    const answers: AnswerMap = {
+      size_candidates: { type: "choice", choice: "n1", confidence: 0.35, probabilities: {} },
+      _hazard: { type: "noul", noul: 0.1 },
+    };
+    let caught: unknown;
+    try {
+      evaluateGates(answers, meta, defaultGateOptions(true, 0.85, {}, ["size"]));
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(JevBodyError);
+    expect((caught as JevBodyError).code).toBe("jev_ambiguous");
+    const body = (caught as JevBodyError).body;
+    expect(body.fields).toEqual([
+      { field: "size_candidates", confidence: 0.35, threshold: 0.85 },
+    ]);
+  });
+
+  it("passes when the candidate selector confidence is high", () => {
+    const answers: AnswerMap = {
+      size_candidates: { type: "choice", choice: "n1", confidence: 0.92, probabilities: {} },
+      _hazard: { type: "noul", noul: 0.1 },
+    };
+    expect(() =>
+      evaluateGates(answers, meta, defaultGateOptions(true, 0.85, {}, ["size"])),
+    ).not.toThrow();
+  });
+
+  it("honors per-field thresholds for candidate selectors", () => {
+    const answers: AnswerMap = {
+      size_candidates: { type: "choice", choice: "n0", confidence: 0.6, probabilities: {} },
+      _hazard: { type: "noul", noul: 0.1 },
+    };
+    expect(() =>
+      evaluateGates(
+        answers,
+        meta,
+        defaultGateOptions(true, 0.85, { size: 0.5 }, ["size"]),
+      ),
+    ).not.toThrow();
+  });
+
   it("skips hazard when disabled", () => {
     const answers: AnswerMap = {
       effect: { type: "choice", choice: "fadein", confidence: 1, probabilities: {} },

@@ -57,14 +57,30 @@ export function evaluateGates(
 
   const weakFields: FieldDiagnostic[] = [];
   for (const field of options.fields) {
-    const ans = answers[field];
-    if (!ans) continue;
-    if (ans.type !== "choice" && ans.type !== "score") continue;
-
     const threshold =
       options.fieldThresholds[field] ?? options.ambiguityThreshold;
-    if (ans.confidence < threshold) {
-      weakFields.push({ field, confidence: ans.confidence, threshold });
+
+    const ans = answers[field];
+    if (ans && (ans.type === "choice" || ans.type === "score")) {
+      if (ans.confidence < threshold) {
+        weakFields.push({ field, confidence: ans.confidence, threshold });
+      }
+    }
+
+    // int/number/string/date fields resolve their value from a paired
+    // `<field>_candidates` choice selector whenever 2+ candidates exist.
+    // That selector IS the field's real answer: gate it with the same
+    // per-field threshold, otherwise a low-confidence pick silently
+    // reaches assembly.
+    const selector = answers[`${field}_candidates`];
+    if (selector && selector.type === "choice") {
+      if (selector.confidence < threshold) {
+        weakFields.push({
+          field: `${field}_candidates`,
+          confidence: selector.confidence,
+          threshold,
+        });
+      }
     }
   }
 

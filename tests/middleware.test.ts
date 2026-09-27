@@ -243,4 +243,35 @@ describe("jevBody middleware", () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("jev_missing_candidate");
   });
+
+  it("rejects with jev_ambiguous when a numeric candidate selector has low confidence", async () => {
+    const orderLike = defineSchema({
+      quantity: intField({ question: "how many units" }),
+    });
+    const app = express();
+    app.use(express.json());
+    app.post(
+      "/orders",
+      jevBody(orderLike, {
+        client: createMockClient({
+          quantity_candidates: ans.choice("n0", 0.35),
+          _hazard: ans.noul(0.05),
+        }),
+      }),
+      (req, res) => res.json(getPayload(req, orderLike)),
+    );
+    app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      if (err instanceof JevBodyError) return res.status(err.status).json(err.body);
+      return res.status(500).json({ error: "internal" });
+    });
+    const res = await request(app)
+      .post("/orders")
+      .send({ prompt: "quiero pedir 2 laptops y 5 mouse" });
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe("jev_ambiguous");
+    expect(res.body.gate).toBe("ambiguity");
+    expect(res.body.fields).toEqual([
+      expect.objectContaining({ field: "quantity_candidates", confidence: 0.35, threshold: 0.85 }),
+    ]);
+  });
 });

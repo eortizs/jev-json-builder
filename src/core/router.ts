@@ -106,10 +106,6 @@ export async function semanticRouter(
   const threshold = options.threshold ?? DEFAULT_ROUTE_THRESHOLD;
   const fallbackDestination =
     options.fallbackDestination ?? DEFAULT_FALLBACK_DESTINATION;
-  const fastDestination =
-    Object.keys(destinations).find((k) => k === DEFAULT_FAST_DESTINATION) ??
-    Object.keys(destinations)[0] ??
-    DEFAULT_FALLBACK_DESTINATION;
 
   if (!Object.hasOwn(destinations, fallbackDestination)) {
     throw new Error(
