@@ -641,6 +641,35 @@ See `tests/nest.test.ts` for a full `@nestjs/testing` + supertest roundtrip.
 
 ---
 
+## Image generation service (`service/server.ts`)
+
+Standalone Express sidecar that turns a natural-language message into a real
+image via the **OpenRouter Images API** — JJB does the NL → JSON extraction
+(no generative LLM in the loop), then the service calls the image endpoint
+deterministically.
+
+```
+POST /api/image   {"prompt": "genera una imagen de un zorro ártico, estilo acuarela, formato 3:4"}
+  → Jev (~300 ms): {"accion":"generar","sujeto":"…","estilo":"acuarela","aspecto":"3:4"}
+  → OpenRouter POST /api/v1/images (default google/gemini-3.1-flash-lite-image, ~$0.034/image)
+  → 200 {"status":"generada","titulo":"…","imagen":"data:image/jpeg;base64,…","costo":0.0336,…}
+  → 200 {"status":"no-imagen"|"aclarar", …} when the intent isn't image generation
+```
+
+- Listens on `127.0.0.1` only (`PORT`, default 3030); requires
+  `TYPESAFE_API_KEY` + `OPENROUTER_API_KEY` (see `.env.example`,
+  `JJB_IMAGE_MODEL` to override the model).
+- Consumption in production: `node --import tsx/esm --env-file=.env service/server.ts`.
+- `demo/image-probe.ts` is the standalone probe that validated the chat
+  completions vs dedicated Images API paths (`--catalog` is free; see script
+  header for usage).
+
+Deployed as the `jjb-image` pm2 process on the People EVE VPS; the People EVE
+apps call it (parent) or replicate the pattern inline (multitenant intent
+`imagen.generar`).
+
+---
+
 ## Roadmap
 
 - [x] Express middleware with `jevBody(spec)` + `getPayload(req, spec)`.
